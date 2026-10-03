@@ -58,8 +58,8 @@ pushes code, creates fix PRs or incident issues, dispatches remediation, publish
 packages/releases, deploys, or rolls back workloads.
 
 CI installs Factory tools, selects the supported runtime from the validated
-contract, and executes the reference workload. Security, Agent Review, and Release
-Certification remain unsupported and intentionally fail. A separate CI job runs template tests and
+contract, and executes the reference workload. Security and Agent Review report unavailable integration status. Release
+Certification remains blocked and intentionally fails. A separate CI job runs template tests and
 typechecking; its success must not replace workload-required checks in repository
 protections. Dependency and Health schedules only report unsupported status; they
 do not maintain dependencies or measure health. Remediation has only a manual
@@ -69,8 +69,8 @@ The new Trusted Policy workflow reads evaluator and policy from the base revisio
 with candidate files used as data only. It requires governance-approved bootstrap
 before it can operate in GitHub; its green result is execution-policy evidence only.
 
-The incomplete CodeQL/build setup is withdrawn until the supported workload and
-finding-severity gate exist. This baseline does not perform SAST or secret scanning.
+GitHub-native CodeQL and code quality checks are enabled. Factory evaluation of
+security findings remains unimplemented; status-report jobs do not perform scans.
 GitHub's security policy, Dependabot alerts, code scanning alerts, and secret
 scanning alerts are the selected review sources; CodeRabbit is not required.
 See [security review sources and hosted status](security.md). Selecting GitHub
@@ -94,3 +94,9 @@ and supply revision-bound evidence before restoring privileged jobs. Changing la
 policy declarations, persona instructions, or capability messages alone is not an
 enablement mechanism. Preserve separate read-only validation and authorized write
 jobs as capabilities are implemented.
+
+## Interim PR integration reporting
+
+Incomplete Factory security and review jobs report unavailable status without
+failing PRs. GitHub-native protections remain active; release certification remains
+blocked. See [the restoration plan](governance-follow-ups.md) for tracked follow-up tickets.

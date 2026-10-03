@@ -73,9 +73,15 @@ through an environment variable from GitHub event metadata, never shell source.
 
 The governance owner must review and merge the initial evaluator, schemas, pack,
 and workflow before this hosted gate can run. It cannot securely approve its own
-bootstrap PR. Existing Agent Review remains fail-closed because hosted human-review
-evidence is not implemented. Adding this workflow does not configure required checks
+bootstrap PR. Existing Agent Review reports unavailable status because hosted human-review
+evidence is not implemented; release certification remains fail-closed. Adding this workflow does not configure required checks
 or make certification pass; protections and hosted integration validation follow
 their own tickets. A policy change takes effect only after governance-approved
 landing changes the trusted base for subsequent PR events. Existing PRs need a new
 event to reevaluate against updated base policy.
+
+## Interim PR integration reporting
+
+Incomplete Factory security and review jobs report unavailable status without
+failing PRs. GitHub-native protections remain active; release certification remains
+blocked. See [the restoration plan](governance-follow-ups.md) for tracked follow-up tickets.

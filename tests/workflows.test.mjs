@@ -10,8 +10,8 @@ import { parse } from 'yaml';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixtures = [
   ['factory-ci.yml', 'validation-plane', 'contract-validation', true],
-  ['factory-security.yml', 'security-plane', 'secret-scanning', true],
-  ['factory-agent-review.yml', 'code-quality-and-policy-review', 'policy-review', true],
+  ['factory-security.yml', 'security-plane', 'secret-scanning', false],
+  ['factory-agent-review.yml', 'code-quality-and-policy-review', 'policy-review', false],
   ['factory-release.yml', 'release-plane', 'release-certification', true],
   ['factory-dependencies.yml', 'evaluate-dependencies', 'dependency-automation', false],
   ['factory-health.yml', 'evaluate-health', 'health-monitoring', false],
@@ -93,7 +93,7 @@ for (const [filename, jobName, capability, required] of fixtures) {
       const executesContract = filename === 'factory-ci.yml';
       assert.equal(outcome.status, required && !executesContract ? 1 : 0);
       const report = JSON.parse(outcome.stdout);
-      assert.equal(report.outcome, executesContract ? 'passed' : required ? 'blocked' : 'unsupported');
+      assert.equal(report.outcome, executesContract ? 'passed' : required ? 'blocked' : capability === 'policy-review' ? 'not-run' : 'unsupported');
       if (executesContract) {
         assert.equal(report.operation, 'validate');
         assert.deepEqual(report.results.map((gate) => gate.capability), ['install', 'validate', 'test', 'build']);

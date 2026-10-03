@@ -9,7 +9,7 @@ Contract validation and the Node 24 reference workload execute locally and in CI
 Scoped execution-policy evaluation is available through the public CLI, with
 trusted policy revisions and approved exceptions. Hosted human review, coverage
 enforcement, Factory security gates, and release
-certification remain **unsupported**. Those required gates deliberately fail until
+certification remain **unsupported**. Release certification deliberately fails until
 their implementations and evidence checks exist. Dependency merging, agent writes,
 release publication, deployment, health alerts, and rollback are disabled.
 
@@ -65,3 +65,9 @@ These commands verify the public safety interface, contract failure/timeout fixt
 and workflow fixtures. The CI workflow fixture also executes the reference workload.
 Passing these checks does not authorize release; policy/security integration and
 revision-bound certification remain separate implementation tickets.
+
+## Interim PR integration reporting
+
+Incomplete Factory security and review jobs report unavailable status without
+failing PRs. GitHub-native protections remain active; release certification remains
+blocked. See [the restoration plan](docs/governance-follow-ups.md) for tracked follow-up tickets.

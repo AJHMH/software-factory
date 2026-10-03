@@ -33,14 +33,14 @@ function fixture(t) {
   write('factory-contract.yaml', contract);
   git('init');
   git('add', '.');
-  git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'trusted policy');
+  git('-c', 'commit.gpgsign=false', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'trusted policy');
   let trustedRevision = git('rev-parse', 'HEAD');
   const revision = trustedRevision;
   const pin = () => {
     write('policies/enforcement.yaml', policy);
     write('profiles/workloads.yaml', profiles);
     git('add', 'policies', 'profiles');
-    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'approved policy');
+    git('-c', 'commit.gpgsign=false', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'approved policy');
     trustedRevision = git('rev-parse', 'HEAD');
   };
   const run = (...extra) => {
