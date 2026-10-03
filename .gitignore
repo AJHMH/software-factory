@@ -56,3 +56,6 @@ __pycache__/
 *.tfvars.json
 !*.tfvars.example
 !*.tfvars.json.example
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
