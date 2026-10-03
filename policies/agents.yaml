@@ -1,0 +1,25 @@
+version: 1.0
+agents:
+  global:
+    max_retries: 3
+    budget_limit_usd_per_pr: 2.0
+    allowed_execution_environments: ["pr_branch", "sandbox"]
+
+  boundaries:
+    # Agents are never allowed to modify these directories without explicit human override
+    restricted_paths:
+      - ".github/workflows/"
+      - "policies/"
+      - "infrastructure/production/"
+    
+  permissions:
+    coding_agent:
+      can_commit: true
+      can_merge: false
+    review_agent:
+      can_approve: true
+      can_merge: true
+      override_required_for: ["governance", "security"]
+    remediation_agent:
+      can_commit: true
+      can_merge: false

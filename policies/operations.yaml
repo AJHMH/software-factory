@@ -1,0 +1,22 @@
+version: 1.0
+operations:
+  observability:
+    required_metrics:
+      - "lead_time"
+      - "deployment_frequency"
+      - "mttr"
+      - "change_failure_rate"
+
+  health_checks:
+    frequency_minutes: 5
+    timeout_seconds: 10
+    consecutive_failures_for_alert: 3
+
+  SLOs:
+    target_mttr_minutes: 60
+    target_uptime_percentage: 99.9
+
+  incident_response:
+    auto_rollback_on_health_failure: true
+    alert_channel: "#ops-alerts"
+    trigger_remediation_agent: true

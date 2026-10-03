@@ -1,0 +1,80 @@
+name: Factory Agent Review & Auto-Remediation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+  security-events: write
+  checks: write
+
+jobs:
+  code-quality-and-policy-review:
+    name: Code Quality & Policy Review
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history so the agent can see all changes on the branch
+          fetch-depth: 0
+          # Use a PAT or standard token that allows triggering new workflows if needed
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load Factory Policies
+        id: load-policies
+        run: |
+          echo "Reading governance and quality policies..."
+          # In a real scenario, this step might parse the YAML to pass specific thresholds to the review tool
+          cat policies/governance.yaml
+          cat policies/quality.yaml
+          echo "policies_loaded=true" >> $GITHUB_OUTPUT
+
+      - name: GitHub Code Quality Scan
+        id: code-quality
+        # Simulating or integrating GitHub Code Quality / CodeQL tools here.
+        # If this step exits with a non-zero code, it blocks the PR.
+        # We use `continue-on-error: true` so we can catch the failure and trigger the auto-fix.
+        continue-on-error: true
+        run: |
+          echo "Running Code Quality Analysis against policies..."
+          # Placeholder for the actual CLI tool or GitHub Action call
+          # e.g., github-code-quality-cli check --policy policies/governance.yaml --policy policies/quality.yaml
+          
+          # Simulating a failure condition for demonstration purposes
+          # exit 1 
+
+      - name: Auto-Remediate Issues
+        if: steps.code-quality.outcome == 'failure'
+        run: |
+          echo "Code Quality check failed. Initiating Factory Coding Agent to auto-fix..."
+          
+          # Placeholder for the agent remediation logic:
+          # 1. Agent reads the failure output
+          # 2. Agent modifies files to comply with governance.yaml and quality.yaml
+          # e.g., factory-agent fix --target . --context "PR diff"
+          
+          echo "Agent has completed fixes."
+
+      - name: Commit and Push Fixes
+        if: steps.code-quality.outcome == 'failure'
+        run: |
+          git config --global user.name "factory-agent[bot]"
+          git config --global user.email "factory-agent[bot]@users.noreply.github.com"
+          
+          # If the agent modified files, commit and push them to the same PR branch
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git add .
+            git commit -m "chore(auto-fix): remediate code quality and policy violations"
+            git push origin HEAD:${{ github.head_ref }}
+            echo "Fixes pushed. The PR will re-trigger this workflow."
+          else
+            echo "No files were modified by the agent."
+          fi
+          
+          # Since the original check failed, we fail this job so the merge remains blocked 
+          # until the new commit runs and passes cleanly.
+          exit 1

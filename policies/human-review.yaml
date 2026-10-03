@@ -1,0 +1,18 @@
+version: 1.0
+human_review:
+  # Paths that automatically trigger a mandatory human review (blocking agent auto-merge)
+  mandatory_paths:
+    - "policies/**/*.yaml"
+    - "infrastructure/**/*.tf"
+    - ".github/workflows/**/*.yml"
+    - "src/auth/**/*"
+    - "src/payments/**/*"
+
+  conditional_triggers:
+    lines_changed_threshold: 500
+    decrease_in_test_coverage: true
+    modifies_database_schema: true
+
+  approvals_required:
+    default: 1
+    critical_paths: 2

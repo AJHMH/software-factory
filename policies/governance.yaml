@@ -1,0 +1,17 @@
+version: 1.0
+governance:
+  autonomy_level: "conditional_autonomy" # manual, assisted, governed, conditional_autonomy, dark_factory
+  
+  audit:
+    retention_days: 365
+    log_all_agent_prompts: true
+  
+  repository_requirements:
+    require_branch_protection: true
+    require_signed_commits: true
+    require_linear_history: true
+    require_issue_link_in_pr: true
+
+  compliance:
+    soc2_mode: true
+    prevent_force_push_main: true

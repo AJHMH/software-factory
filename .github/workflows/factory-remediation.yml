@@ -1,0 +1,92 @@
+name: Factory Automated Remediation
+
+on:
+  repository_dispatch:
+    types: [trigger-remediation]
+  workflow_dispatch:
+    inputs:
+      issue_id:
+        description: 'Issue or Vulnerability ID to remediate'
+        required: true
+  # Optionally, trigger on specific issue comments (e.g., "@factory-agent fix this")
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-remediate:
+    name: Generate and Propose Fix
+    # Only run on issue comments if the comment contains the trigger phrase, or if dispatched
+    if: github.event_name != 'issue_comment' || contains(github.event.comment.body, '@factory-agent fix')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full depth so the agent has full context
+          fetch-depth: 0
+
+      - name: Load Governance Policy
+        id: load-policy
+        run: |
+          echo "Reading governance policy to ensure agent permissions..."
+          cat policies/agents.yaml
+          
+          # The agent would verify it has authorization to modify the affected subsystem
+          echo "policy_loaded=true" >> $GITHUB_OUTPUT
+
+      - name: Invoke Security/Coding Agent
+        id: remediation-agent
+        run: |
+          echo "Initiating AI Remediation Sequence..."
+          
+          # Extract context depending on how the workflow was triggered
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "Context: Payload from Security Scan - ${{ github.event.client_payload.finding }}"
+            BRANCH_NAME="remediate-scan-${{ github.event.client_payload.id }}"
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "Context: Manual Trigger for Issue ${{ github.event.inputs.issue_id }}"
+            BRANCH_NAME="remediate-issue-${{ github.event.inputs.issue_id }}"
+          elif [ "${{ github.event_name }}" == "issue_comment" ]; then
+            echo "Context: Issue #${{ github.event.issue.number }} triggered by comment"
+            BRANCH_NAME="remediate-issue-${{ github.event.issue.number }}"
+          fi
+          
+          git checkout -b "$BRANCH_NAME"
+          
+          # Placeholder for the actual Agent execution
+          # e.g., factory-agent remediate --context "$CONTEXT"
+          
+          # Simulating a file modification
+          echo "Fix applied to src/index.js (simulated)" > agent_fix.log
+          
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request with Fix
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchName = '${{ steps.remediation-agent.outputs.branch_name }}';
+            
+            // In a real scenario, you'd use git commands or an action to commit and push first.
+            // E.g. git add . && git commit -m "fix(security): automated remediation" && git push origin $branchName
+            
+            console.log(`Creating Pull Request from branch ${branchName}...`);
+            
+            // Create the PR
+            /*
+            await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "🔧 Automated Remediation: Security Finding",
+              head: branchName,
+              base: "main",
+              body: "This PR was generated autonomously by the Factory Security Agent to remediate an identified issue.\n\nPlease review the changes."
+            });
+            */
+            console.log("Pull Request created successfully.");

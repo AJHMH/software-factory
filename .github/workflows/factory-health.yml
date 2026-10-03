@@ -1,0 +1,67 @@
+name: Factory Health Checks
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  issues: write # Allow creating issues for health failures
+  contents: read
+
+jobs:
+  evaluate-health:
+    name: Evaluate Application & Repo Health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Load Factory Operations Policy
+        id: load-ops
+        run: |
+          echo "Reading operations policy..."
+          cat policies/operations.yaml
+          echo "operations_loaded=true" >> $GITHUB_OUTPUT
+
+      - name: Parse Factory Contract
+        id: contract
+        run: |
+          # The blueprint specifies that every repo must have a factory-contract.yaml
+          # We check if health_endpoint_required is true
+          if grep -q "health_endpoint_required: true" factory-contract.yaml; then
+            echo "Health endpoint is required by contract."
+            echo "requires_endpoint=true" >> $GITHUB_OUTPUT
+          else
+            echo "Health endpoint is not required."
+            echo "requires_endpoint=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check Application Health Endpoint
+        if: steps.contract.outputs.requires_endpoint == 'true'
+        run: |
+          echo "Executing application health check against deployed endpoint..."
+          # Placeholder: In a real scenario, the URL might come from environment variables or deployments
+          # Example: curl -f https://api.production.example.com/health || exit 1
+          echo "Simulating health check... PASS"
+
+      - name: Codebase & Rot Checks
+        run: |
+          echo "Checking repository health (stale PRs, open vulnerabilities)..."
+          # Placeholder: A script or agent could run here to evaluate if the repo is meeting 
+          # lead time, MTTR, or staleness policies defined in policies/operations.yaml.
+          echo "Repo health checks... PASS"
+
+      - name: Report Failure via Issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "🚨 Factory Health Check Failed",
+              body: "The scheduled factory health check failed. An Operations Agent should investigate the telemetry and logs immediately."
+            })

@@ -1,0 +1,1 @@
+Factory as Product operating model.

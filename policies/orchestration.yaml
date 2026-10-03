@@ -1,0 +1,20 @@
+version: 1.0
+orchestration:
+  execution_sequence:
+    - step: "validation_plane"
+      required: true
+    - step: "security_plane"
+      required: true
+    - step: "human_review"
+      required: false
+      depends_on: ["validation_plane", "security_plane"]
+    - step: "release_plane"
+      required: true
+      depends_on: ["validation_plane", "security_plane"]
+
+  retry_policy:
+    max_attempts_for_flaky_tests: 2
+    max_remediation_loops_per_pr: 3
+
+  escalation:
+    timeout_minutes_before_human_alert: 30

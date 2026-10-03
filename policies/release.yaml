@@ -1,0 +1,20 @@
+version: 1.0
+release:
+  versioning:
+    strategy: "semantic" # major.minor.patch
+    require_conventional_commits: true
+
+  certification:
+    require_clean_ci: true
+    require_clean_security_scan: true
+    require_approved_pr: true
+
+  rollback:
+    require_rollback_plan_in_pr: false
+    auto_rollback_threshold:
+      error_rate_spike_percentage: 5
+      duration_minutes: 5
+
+  changelog:
+    auto_generate: true
+    exclude_commit_types: ["chore", "test", "docs"]

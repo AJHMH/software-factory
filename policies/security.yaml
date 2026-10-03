@@ -1,0 +1,18 @@
+version: 1.0
+security:
+  sast:
+    block_on_severity: ["critical", "high"]
+    warn_on_severity: ["medium"]
+
+  secrets:
+    fail_on_any_secret: true
+    allow_dummy_secrets_in_tests: true
+
+  supply_chain:
+    require_sbom_generation: true
+    allow_unverified_registries: false
+    max_dependency_age_days: 180
+
+  agent_remediation:
+    auto_fix_sast_findings: true
+    auto_fix_dependency_vulnerabilities: true

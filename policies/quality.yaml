@@ -1,0 +1,19 @@
+version: 1.0
+quality:
+  testing:
+    coverage_thresholds:
+      global_minimum_percentage: 80
+      new_code_minimum_percentage: 90
+    allow_coverage_decrease: false
+    require_unit_tests: true
+    require_integration_tests: true
+
+  linting:
+    treat_warnings_as_errors: true
+    allow_suppression_comments: false # e.g. no eslint-disable without Review Agent approval
+
+  release_readiness:
+    zero_open_defects_severity: "high" # Cannot release with high severity bugs
+    max_open_defects_severity:
+      medium: 5
+      low: 20
