@@ -22,12 +22,16 @@ Missing, disabled, inaccessible, or stale scanning results must not count as cle
 checks. Actual alert evaluation and revision-bound enforcement are implementation
 work in issues #6, #7, and #14.
 
-On October 3, 2026, a read-only GitHub check showed Dependabot security updates
-enabled and no open Dependabot alerts. Code Security, secret scanning, and secret
-push protection were disabled. GitHub reported no published security policy.
-This snapshot predates publication of the local security policy and must be
-rechecked after enabling scanners and pushing changes; it is not a clean scan of
-the local implementation.
+On October 3, 2026, after the factory owner enabled GitHub Security features,
+read-only API checks verified Code Security, Dependabot security updates, and
+secret scanning enabled. Dependabot and secret scanning each reported zero open
+alerts. CodeQL default setup remained `not-configured`, and the code-scanning
+APIs reported no analysis found. Secret scanning push protection, non-provider
+patterns, validity checks, AI detection, and delegated dismissal remained disabled.
+GitHub still reported no published security policy; the policy is committed locally
+but has not been pushed. Recheck these settings after configuring analysis and
+pushing changes. The zero-alert counts are not a clean scan of unpushed local code,
+and enabled hosted features do not implement the Factory's alert-enforcement gates.
 
 ## Threat Vectors
 1. **Supply Chain Attacks:** Mitigated via strict Dependency policies (e.g., auto-updates, SCA scans).
