@@ -1,6 +1,6 @@
 version: "1.0"
 # Enforces execution limits only; other policy files remain roadmap declarations.
-maximum_command_timeout_seconds: 600
+maximum_command_timeout_seconds: 300
 exception_approvers: ["factory-governance-owner"]
 # Records are added to a separately reviewed and pinned trusted policy commit.
 approvals: []

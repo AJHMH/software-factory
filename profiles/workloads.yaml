@@ -1,4 +1,4 @@
 version: "1.0"
 profiles:
   - id: "node-24"
-    maximum_command_timeout_seconds: 600
+    maximum_command_timeout_seconds: 120
