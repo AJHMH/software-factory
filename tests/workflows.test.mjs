@@ -120,6 +120,8 @@ test('human review re-evaluates current PR heads on reviews and dismissals witho
   assert.equal(job.steps[0].with.ref,'${{ github.event.pull_request.head.sha }}');
   assert.equal(job.steps[0].with['persist-credentials'],false);
   const gate=job.steps.at(-1);assert.equal(gate.env.BASE_REVISION,'${{ github.event.pull_request.base.sha }}');
+  assert.equal(gate.env.TRUSTED_POLICY_REVISION,'${{ vars.FACTORY_REVIEW_POLICY_REVISION || github.event.pull_request.base.sha }}');
+  assert.ok(gate.run.includes('--trusted-revision "$TRUSTED_POLICY_REVISION"'));
   assert.ok(gate.run.includes('collect-reviews'));assert.ok(gate.run.includes('--coverage-evidence github'));
   assert.ok(job.steps.every(step=>!step['continue-on-error'] && !step.run?.includes('${{')));
 });

@@ -43,4 +43,5 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           BASE_REVISION: ${{ github.event.pull_request.base.sha }}
-        run: node scripts/factory-validation.mjs collect-reviews --repository "$REPOSITORY" --pull-request "$PULL_REQUEST" --base-revision "$BASE_REVISION" --trusted-revision "$BASE_REVISION" --coverage-evidence github --output tmp/human-review-evidence.json
+          TRUSTED_POLICY_REVISION: ${{ vars.FACTORY_REVIEW_POLICY_REVISION || github.event.pull_request.base.sha }}
+        run: node scripts/factory-validation.mjs collect-reviews --repository "$REPOSITORY" --pull-request "$PULL_REQUEST" --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --coverage-evidence github --output tmp/human-review-evidence.json

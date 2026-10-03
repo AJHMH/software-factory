@@ -68,6 +68,17 @@ plan is ready; do not discard its commits or evidence.
 Main still contains the previous two-review policy. A candidate policy cannot
 reduce its own governing approval count. The owner-approved one-review policy
 therefore needs an explicit governed bootstrap before this increment can land.
+After the owner submits a GitHub APPROVED review on the replacement App-authored
+PR's exact final head, verify the review identity and commit signature, then set
+the administrative repository variable `FACTORY_REVIEW_POLICY_REVISION` to that
+full reviewed SHA. This selects the owner-approved policy commit as authority;
+the candidate cannot supply this variable through its contract or evidence.
+Record the review ID and selected policy digest on the ticket. Re-run the review
+check, verify its one current owner approval, and retain every other required
+check and native review protection. Any head change requires a new owner review
+before changing the pin. Delete the temporary variable after the merge so future
+PRs again use base policy by default. No variable has been activated yet.
+
 Keep required approval checks active while preparing that bootstrap; do not
 silently change the evaluator to trust candidate policy. Ticket #9 continues
 tracking authoritative workflow/evaluator distribution and merge-time checks.
