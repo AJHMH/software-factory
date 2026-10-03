@@ -3,14 +3,13 @@ import { dirname, resolve, relative, sep, isAbsolute } from 'node:path';
 import { parse } from 'yaml';
 import { digest, git, document } from './policy-evaluation.mjs';
 import { rawGit } from './coverage-evaluation.mjs';
-import { versions } from './security-tools.mjs';
 
 export class UnsupportedSecurityCapability extends Error {}
 
 /** @typedef {{path:string,rule:string,line:number,source_digest:string}} SecretFinding */
 /** @typedef {{package:string,severity:'info'|'low'|'medium'|'high'|'critical',advisory:string}} DependencyFinding */
 /** @template T @typedef {{status:'clean'|'findings'|'error'|'unsupported',exit_code:number|null,findings:T[]}} Scan */
-/** @typedef {{version:string,revision:string,tree_digest:string,workload_id:string,profile:string,contract_digest:string,tools:typeof versions,secrets:Scan<SecretFinding>,dependencies:Scan<DependencyFinding>}} Evidence */
+/** @typedef {{version:string,revision:string,tree_digest:string,workload_id:string,profile:string,contract_digest:string,tools:typeof import('./security-tools.mjs').versions,secrets:Scan<SecretFinding>,dependencies:Scan<DependencyFinding>}} Evidence */
 /** @param {Record<string,string>} options */
 export function securityContext(options) {
   const filename = resolve(options['--contract'] ?? 'factory-contract.yaml');
