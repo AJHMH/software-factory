@@ -2,93 +2,31 @@ name: Factory Security Checks
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   schedule:
-    # Run daily at 1:00 AM UTC to catch newly disclosed vulnerabilities in existing code
     - cron: '0 1 * * *'
+  workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
-  security-events: write
 
 jobs:
   security-plane:
     name: Execute Security Scans
     runs-on: ubuntu-latest
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Load Security Policy
-        id: load-policy
-        run: |
-          echo "Reading security policy..."
-          cat policies/security.yaml
-          
-          # The agent or security tooling parses this to set thresholds
-          # e.g., block on 'critical' and 'high' severity, but just warn on 'medium'
-          echo "policy_loaded=true" >> $GITHUB_OUTPUT
-
-      - name: Initialize CodeQL (SAST)
-        # Using GitHub's native CodeQL for Static Application Security Testing
-        uses: github/codeql-action/init@v3
         with:
-          # A true factory could dynamically read the language from factory-contract.yaml
-          languages: 'javascript'
-
-      - name: Parse Factory Contract for Build (If required by CodeQL)
-        id: contract
-        uses: actions/github-script@v7
+          persist-credentials: false
+      - name: Set up Factory tooling
+        uses: actions/setup-node@v4
         with:
-          script: |
-            const fs = require('fs');
-            const yaml = require('js-yaml');
-            try {
-              const fileContents = fs.readFileSync('factory-contract.yaml', 'utf8');
-              const data = yaml.load(fileContents);
-              if (data && data.contract && data.contract.commands && data.contract.commands.build) {
-                 core.exportVariable('CMD_BUILD', data.contract.commands.build);
-              }
-            } catch (e) {
-              console.log("No build command found or needed.");
-            }
-
-      - name: Build Application for CodeQL
-        if: env.CMD_BUILD != ''
-        run: |
-          echo "Executing contract build command for SAST analysis..."
-          $CMD_BUILD
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:javascript"
-
-      - name: Secret Scanning
-        run: |
-          echo "Running secret scanning rules defined in policies/security.yaml..."
-          # In a real environment, this could trigger tools like TruffleHog or Gitleaks
-          # e.g., gitleaks detect --source . -v
-          echo "Secret scanning completed... PASS"
-
-      - name: Trigger Remediation Agent on Failure
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            // If the security scan fails, trigger the factory-remediation.yml workflow
-            // to have the AI agent attempt an auto-fix.
-            console.log("Security scan failed. Dispatching remediation event...");
-            await github.rest.repos.createDispatchEvent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              event_type: 'trigger-remediation',
-              client_payload: {
-                finding: "Security scan failed. Please investigate logs.",
-                id: context.runId
-              }
-            });
+          node-version: '24'
+      - name: Report Factory capability inventory
+        run: node scripts/factory-validation.mjs inventory
+      - name: Report capability outcome
+        run: node scripts/factory-validation.mjs capability secret-scanning --required

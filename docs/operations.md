@@ -1,5 +1,11 @@
 # Operations & Runbooks
 
+## Implementation status
+Endpoint monitoring, incident reporting, remediation, paging, deployment, and
+rollback are disabled. The workflow reports unsupported status without checking a
+deployed endpoint. The procedures below describe the intended operating model.
+See [capabilities](capabilities.md) before relying on any automated recovery.
+
 ## Topology
 The Factory orchestrates workloads across environments (dev, staging, production). Agents monitor the `health_endpoint` of each active workload.
 

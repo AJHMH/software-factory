@@ -2,68 +2,48 @@ name: Factory Continuous Integration
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   validation-plane:
     name: Execute Factory Contract Validation
     runs-on: ubuntu-latest
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Parse Factory Contract
-        id: contract
-        uses: actions/github-script@v7
         with:
-          script: |
-            const fs = require('fs');
-            const yaml = require('js-yaml');
-            
-            try {
-              const fileContents = fs.readFileSync('factory-contract.yaml', 'utf8');
-              const data = yaml.load(fileContents);
-              
-              if (!data || !data.contract || !data.contract.commands) {
-                core.setFailed("Invalid factory-contract.yaml format");
-                return;
-              }
-              
-              // Export commands to environment variables for subsequent steps
-              core.exportVariable('CMD_INSTALL', data.contract.commands.install);
-              core.exportVariable('CMD_VALIDATE', data.contract.commands.validate);
-              core.exportVariable('CMD_TEST', data.contract.commands.test);
-              core.exportVariable('CMD_BUILD', data.contract.commands.build);
-            } catch (e) {
-              core.setFailed(`Failed to parse factory-contract.yaml: ${e.message}`);
-            }
-
-      - name: Setup Node Environment
-        # A true universal factory might parse the runtime from the contract as well,
-        # but Node 20 acts as the default runner here.
+          persist-credentials: false
+      - name: Set up Factory tooling
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
+      - name: Report Factory capability inventory
+        run: node scripts/factory-validation.mjs inventory
+      - name: Report capability outcome
+        run: node scripts/factory-validation.mjs capability contract-validation --required
 
-      - name: Gate 1 - Install Dependencies
-        run: |
-          echo "Executing contract install command: $CMD_INSTALL"
-          $CMD_INSTALL
-
-      - name: Gate 2 - Validation (Type Check, Linting)
-        run: |
-          echo "Executing contract validate command: $CMD_VALIDATE"
-          $CMD_VALIDATE
-
-      - name: Gate 3 - Tests (Unit & Integration)
-        run: |
-          echo "Executing contract test command: $CMD_TEST"
-          $CMD_TEST
-
-      - name: Gate 4 - Build Validation
-        run: |
-          echo "Executing contract build command: $CMD_BUILD"
-          $CMD_BUILD
+  factory-template-tests:
+    name: Verify Factory safety controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Factory tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned development tools
+        run: npm ci --ignore-scripts
+      - name: Typecheck Factory interface
+        run: npm run typecheck
+      - name: Test public interface and workflow fixtures
+        run: npm test

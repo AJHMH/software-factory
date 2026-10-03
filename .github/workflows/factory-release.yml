@@ -2,62 +2,27 @@ name: Factory Release Certification
 
 on:
   push:
-    branches:
-      - main
-    # Alternatively, this could be triggered on workflow_run after factory-ci passes
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
-  packages: write
+  contents: read
 
 jobs:
   release-plane:
-    name: Certify and Publish Release
+    name: Certify Release (publication disabled)
     runs-on: ubuntu-latest
-    
-    # We only want to release if the commit message implies a change (not a chore/ci)
-    # Alternatively, rely on an action to determine if a release is needed based on Conventional Commits.
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for changelog generation
-
-      - name: Load Release Policy
-        id: load-policy
-        run: |
-          echo "Reading release policy..."
-          cat policies/release.yaml
-          # Real implementation would parse this to enforce things like 'require_code_coverage_above_90_for_release'
-          echo "policy_loaded=true" >> $GITHUB_OUTPUT
-
-      - name: Setup Node Environment
+          persist-credentials: false
+      - name: Set up Factory tooling
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      # The blueprint specifies semantic versioning is required by the factory contract.
-      - name: Semantic Release
-        id: semantic
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Executing Semantic Release based on Conventional Commits..."
-          
-          # This acts as the Release Agent.
-          # In a real repository, we would run standard semantic-release:
-          # npx semantic-release
-          
-          # For demonstration, simulating a version bump
-          echo "Determined next version: v1.1.0"
-          echo "new_release_published=true" >> $GITHUB_OUTPUT
-          echo "new_release_version=1.1.0" >> $GITHUB_OUTPUT
-
-      - name: Trigger Deployment / Operations
-        if: steps.semantic.outputs.new_release_published == 'true'
-        run: |
-          echo "Release v${{ steps.semantic.outputs.new_release_version }} certified and published."
-          echo "Notifying Factory Orchestrator to begin deployment sequence..."
-          # E.g., dispatch a deployment workflow or notify an Operations Agent
+          node-version: '24'
+      - name: Report Factory capability inventory
+        run: node scripts/factory-validation.mjs inventory
+      - name: Report capability outcome
+        run: node scripts/factory-validation.mjs certify
