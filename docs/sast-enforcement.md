@@ -34,7 +34,7 @@ a fixed Node-24-only bootstrap profile, which grants no additional capabilities.
 
 Reports retain revision/tree/contract identity, analysis ID, tool version, selected
 language/build mode, trusted policy/profile/evidence digests, and actionable findings
-(rule, severity, committed path, line, query-help URL). Raw source snippets, messages,
+(rule, severity, committed path, line, official query-help/source URL). Raw source snippets, messages,
 tokens, and full SARIF are omitted. Findings include existing and dismissed results
 present in the analysis; a dismissal does not change the trusted severity policy.
 Policy failure differs from analysis/build error and unsupported capability.

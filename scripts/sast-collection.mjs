@@ -3,7 +3,7 @@ import { sastContext, evaluateSast, sastError } from './sast-evaluation.mjs';
 import { UnsupportedSecurityCapability } from './security-evaluation.mjs';
 
 /** @typedef {{id:number,commit_sha:string,ref:string,category:string,analysis_key:string,tool:{name:string,version:string},error:string,warning:string,rules_count:number,results_count:number}} Metadata */
-/** @typedef {{id:string,helpUri?:string,properties?:{'security-severity'?:string}}} Rule */
+/** @typedef {{id:string,helpUri?:string,properties?:{'security-severity'?:string,queryURI?:string}}} Rule */
 /** @typedef {{ruleId:string,locations?:Array<{physicalLocation:{artifactLocation:{uri:string},region:{startLine:number}}}>}} Result */
 /** @typedef {{tool:{driver:{name:string,semanticVersion:string,rules?:Rule[]},extensions?:Array<{rules?:Rule[]}>},results:Result[],versionControlProvenance?:Array<{revisionId:string,repositoryUri:string}>}} Run */
 
@@ -50,7 +50,7 @@ export async function collectSast(options) {
       const severity=score >= 9 ? 'critical' : score >= 7 ? 'high' : score >= 4 ? 'medium' : score > 0 ? 'low' : 'none';
       const location=result.locations?.[0]?.physicalLocation;
       if (!location) throw new Error('Finding lacks actionable location.');
-      return {rule:rule.id,severity:/** @type {import('./sast-evaluation.mjs').Finding['severity']} */(severity),path:decodeURIComponent(location.artifactLocation.uri),line:location.region.startLine,help_url:rule.helpUri ?? ''};
+      return {rule:rule.id,severity:/** @type {import('./sast-evaluation.mjs').Finding['severity']} */(severity),path:decodeURIComponent(location.artifactLocation.uri),line:location.region.startLine,help_url:rule.helpUri ?? rule.properties?.queryURI ?? ''};
     });
     const evidence=/** @type {import('./sast-evaluation.mjs').Evidence} */({version:'1.0',revision:context.revision,tree_digest:context.treeDigest,contract_digest:context.contractDigest,workload_id:context.contract.workload_id,profile:context.contract.profile,analyses:[{id:selected.id,revision:selected.commit_sha,ref:selected.ref,language:context.codeql.language,build_mode:context.codeql.build_mode,tool_version:selected.tool.version,rules_count:selected.rules_count,status:'success',findings}]});
     if (options['--output']) writeFileSync(options['--output'],JSON.stringify(evidence,null,2)+'\n');

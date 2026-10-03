@@ -12,7 +12,7 @@
         "rules_count":{"type":"integer","minimum":1},"status":{"enum":["success","error","unsupported"]},
         "findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["rule","severity","path","line","help_url"],"properties":{
           "rule":{"type":"string","minLength":1,"maxLength":200},"severity":{"enum":["critical","high","medium","low","none"]},
-          "path":{"type":"string","minLength":1,"maxLength":1000},"line":{"type":"integer","minimum":1},"help_url":{"type":"string","pattern":"^https://codeql\\.github\\.com/"}
+          "path":{"type":"string","minLength":1,"maxLength":1000},"line":{"type":"integer","minimum":1},"help_url":{"type":"string","pattern":"^https://(codeql\\.github\\.com/|github\\.com/github/codeql/)"}
         }}}
       }
     }}
