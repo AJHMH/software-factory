@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   code-quality-and-policy-review:
-    name: Code Quality & Policy Review
+    name: Report Factory review integration status
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -24,4 +24,4 @@ jobs:
       - name: Report Factory capability inventory
         run: node scripts/factory-validation.mjs inventory
       - name: Report capability outcome
-        run: node scripts/factory-validation.mjs capability policy-review --required
+        run: node scripts/factory-validation.mjs capability policy-review

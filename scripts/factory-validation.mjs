@@ -1,6 +1,6 @@
 import { appendFileSync } from 'node:fs';
 
-// Workload execution is available; policy evaluation and release evidence follow in later tickets.
+// Execution and scoped policy evaluation are available; hosted authorization and release evidence follow later.
 /** @type {Record<string, { reason: string, trackingIssue: number, requiredForRelease: boolean, available?: boolean }>} */
 const capabilities = {
   'contract-validation': {
@@ -10,9 +10,10 @@ const capabilities = {
     available: true,
   },
   'policy-review': {
-    reason: 'Trusted policy evaluation and required human approval checks are not implemented.',
+    reason: 'Trusted execution-policy evaluation is available via policy; this report supplies no evaluated policy or hosted human-review evidence.',
     trackingIssue: 4,
     requiredForRelease: true,
+    available: true,
   },
   coverage: {
     reason: 'Global and changed-code coverage thresholds are not enforced.',
@@ -73,6 +74,7 @@ function publish(report) {
       `## Factory ${report.operation}: ${report.outcome}`,
       '',
       report.operation === 'validate' ? 'These command results do not authorize a release or establish policy/security compliance.' :
+        report.operation === 'policy' ? 'Execution-policy evaluation only: no workload commands executed, hosted human approval verified, or release authorized.' :
         'This is a capability report, not evidence of a clean workload check or permission to act.',
       '',
       '| Capability | Status | Required for this request | Reason / tracking issue |',
@@ -84,7 +86,18 @@ function publish(report) {
   console.log(JSON.stringify({ schemaVersion: 1, ...report }));
 }
 
-if ((command === 'validate' || command === 'profile') &&
+if (command === 'policy' && args.length >= 3 && args.length % 2 === 1 &&
+  args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', '--overrides'].includes(arg)) &&
+  new Set(args.filter((_, index) => index % 2 === 1)).size === (args.length - 1) / 2) {
+  const { evaluatePolicy } = await import('./policy-evaluation.mjs');
+  const options = Object.fromEntries(args.slice(1).reduce((entries, value, index, array) => {
+    if (index % 2 === 0) entries.push([value, array[index + 1]]);
+    return entries;
+  }, /** @type {string[][]} */ ([])));
+  const report = evaluatePolicy(options);
+  publish(report);
+  process.exitCode = report.outcome === 'passed' ? 0 : 1;
+} else if ((command === 'validate' || command === 'profile') &&
   (args.length === 1 || (args.length === 3 && args[1] === '--contract' && args[2]))) {
   const { runContract } = await import('./contract-execution.mjs');
   const report = await runContract(args[2] ?? 'factory-contract.yaml', command === 'profile');
@@ -112,6 +125,6 @@ if ((command === 'validate' || command === 'profile') &&
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>]');
+  console.error('Usage: factory-validation.mjs inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }

@@ -1,27 +1,3 @@
-version: 1.0
-
-# Example: Local Policy Overrides
-# This file demonstrates how a specific workload (project repository) 
-# can request exceptions to the global factory policies.
-# 
-# Note: Any overrides placed in a project must be approved by a human 
-# during the PR review process, as enforced by the Review Agent.
-
-overrides:
-  quality:
-    testing:
-      # Example: A legacy project that cannot meet the 80% global minimum
-      coverage_thresholds:
-        global_minimum_percentage: 60
-        new_code_minimum_percentage: 80
-
-  security:
-    # Example: Suppressing a false positive SAST finding globally for this repo
-    sast:
-      suppress_rules:
-        - "js/insecure-randomness"
-
-  governance:
-    # Example: An experimental repo that doesn't need SOC2 compliance yet
-    compliance:
-      soc2_mode: false
+version: "1.0"
+# No exceptions by default. See docs/policy-evaluation.md for the approval procedure.
+exceptions: []

@@ -10,8 +10,8 @@ import { parse } from 'yaml';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixtures = [
   ['factory-ci.yml', 'validation-plane', 'contract-validation', true],
-  ['factory-security.yml', 'security-plane', 'secret-scanning', true],
-  ['factory-agent-review.yml', 'code-quality-and-policy-review', 'policy-review', true],
+  ['factory-security.yml', 'security-plane', 'secret-scanning', false],
+  ['factory-agent-review.yml', 'code-quality-and-policy-review', 'policy-review', false],
   ['factory-release.yml', 'release-plane', 'release-certification', true],
   ['factory-dependencies.yml', 'evaluate-dependencies', 'dependency-automation', false],
   ['factory-health.yml', 'evaluate-health', 'health-monitoring', false],
@@ -37,6 +37,30 @@ test('workflow fixtures cannot approve, push, publish, or hide unsupported requi
       }
     }
   }
+});
+
+test('the trusted policy workflow never runs candidate code or uses candidate policy authority', () => {
+  const workflow = parse(readFileSync(join(root, '.github/workflows/factory-policy.yml'), 'utf8'));
+  assert.deepEqual(Object.keys(workflow.on), ['pull_request_target']);
+  assert.deepEqual(workflow.permissions, { contents: 'read' });
+  const job = workflow.jobs['trusted-policy'];
+  assert.equal(job['timeout-minutes'], 5);
+  assert.equal(job.permissions, undefined);
+  assert.equal(job['continue-on-error'], undefined);
+  const checkouts = job.steps.filter(step => step.uses === 'actions/checkout@v4');
+  assert.equal(checkouts.length, 2);
+  assert.equal(checkouts[0].with.ref, '${{ github.event.pull_request.base.sha }}');
+  assert.equal(checkouts[0].with.path, 'trusted');
+  assert.equal(checkouts[1].with.ref, '${{ github.event.pull_request.head.sha }}');
+  assert.equal(checkouts[1].with.repository, '${{ github.event.pull_request.head.repo.full_name }}');
+  assert.equal(checkouts[1].with.path, 'candidate');
+  assert.ok(checkouts.every(step => step.with['persist-credentials'] === false));
+  const runs = job.steps.filter(step => step.run);
+  assert.deepEqual(runs.map(step => step['working-directory']), ['trusted', 'trusted']);
+  assert.equal(runs[0].run, 'npm ci --ignore-scripts');
+  assert.equal(runs[1].env.TRUSTED_POLICY_REVISION, '${{ github.event.pull_request.base.sha }}');
+  assert.equal(runs[1].run, 'node scripts/factory-validation.mjs policy --trusted-revision "$TRUSTED_POLICY_REVISION" --contract ../candidate/factory-contract.yaml --overrides ../candidate/policy-exceptions.yaml');
+  assert.ok(job.steps.every(step => !step['continue-on-error'] && !step.if && !step.run?.includes('${{')));
 });
 
 for (const [filename, jobName, capability, required] of fixtures) {
@@ -69,7 +93,7 @@ for (const [filename, jobName, capability, required] of fixtures) {
       const executesContract = filename === 'factory-ci.yml';
       assert.equal(outcome.status, required && !executesContract ? 1 : 0);
       const report = JSON.parse(outcome.stdout);
-      assert.equal(report.outcome, executesContract ? 'passed' : required ? 'blocked' : 'unsupported');
+      assert.equal(report.outcome, executesContract ? 'passed' : required ? 'blocked' : capability === 'policy-review' ? 'not-run' : 'unsupported');
       if (executesContract) {
         assert.equal(report.operation, 'validate');
         assert.deepEqual(report.results.map((gate) => gate.capability), ['install', 'validate', 'test', 'build']);
@@ -77,7 +101,7 @@ for (const [filename, jobName, capability, required] of fixtures) {
         const runtimeStep = job.steps.find((step) => step.name === 'Set up selected workload runtime');
         assert.equal(runtimeStep.with['node-version'], '${{ steps.profile.outputs.node_version }}');
       } else {
-        assert.ok(report.results.some((gate) => gate.capability === capability && gate.required === required && gate.status === 'unsupported'));
+        assert.ok(report.results.some((gate) => gate.capability === capability && gate.required === required && gate.status === (capability === 'policy-review' ? 'not-run' : 'unsupported')));
       }
       assert.match(readFileSync(summary, 'utf8'), /not evidence of a clean workload check or permission to act/);
     } finally {

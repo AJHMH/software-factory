@@ -1,0 +1,41 @@
+name: Factory Trusted Policy
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  trusted-policy:
+    name: Evaluate trusted execution policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted evaluator and policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout candidate as data only
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+      - name: Set up trusted Factory tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install trusted evaluator dependencies
+        working-directory: trusted
+        run: npm ci --ignore-scripts
+      - name: Evaluate candidate data against the trusted base revision
+        working-directory: trusted
+        env:
+          TRUSTED_POLICY_REVISION: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/factory-validation.mjs policy --trusted-revision "$TRUSTED_POLICY_REVISION" --contract ../candidate/factory-contract.yaml --overrides ../candidate/policy-exceptions.yaml
