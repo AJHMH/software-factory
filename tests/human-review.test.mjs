@@ -5,16 +5,20 @@ import { join, relative, sep, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
+import { parse } from 'yaml';
 
 const root=fileURLToPath(new URL('../',import.meta.url)), cli=join(root,'scripts/factory-validation.mjs');
-function fixture(t,agents=[]) {
+function fixture(t,agents=[],reviewers=undefined,critical=2) {
   mkdirSync(join(root,'tmp'),{recursive:true});
   const repo=mkdtempSync(join(root,'tmp/review-test-'));
   t.after(()=>{const within=relative(realpathSync(join(root,'tmp')),realpathSync(repo));assert.ok(within && within !== '..' && !within.startsWith('..'+sep) && !isAbsolute(within));rmSync(repo,{recursive:true,force:true});});
   const git=(...args)=>{const result=spawnSync('git',args,{cwd:repo,encoding:'utf8'});assert.equal(result.status,0,result.stderr);return result.stdout.trim();};
   const write=(name,value)=>{mkdirSync(join(repo,name,'..'),{recursive:true});writeFileSync(join(repo,name),typeof value === 'string' ? value : JSON.stringify(value));};
   const commit=()=>{git('add','.');git('-c','commit.gpgsign=false','-c','user.name=Test','-c','user.email=test@example.invalid','commit','-m','fixture');return git('rev-parse','HEAD');};
-  write('policies/human-review.yaml',readFileSync(join(root,'policies/human-review.yaml'),'utf8').replace('agent_accounts: ["github-actions[bot]", "dependabot[bot]"]',`agent_accounts: ${JSON.stringify(agents)}`));
+  const policy=parse(readFileSync(join(root,'policies/human-review.yaml'),'utf8'));
+  policy.human_review.agent_accounts=agents;policy.human_review.approvals_required.critical_paths=critical;
+  if(reviewers) policy.human_review.human_approvers=reviewers;else delete policy.human_review.human_approvers;
+  write('policies/human-review.yaml',policy);
   for(const name of ['quality','enforcement']) write(`policies/${name}.yaml`,readFileSync(join(root,`policies/${name}.yaml`),'utf8'));
   write('factory-contract.yaml',{version:'1.0',contract:{workload_id:'reviews',profile:'node-24',working_directory:'workload',commands:Object.fromEntries(['install','validate','test','build'].map(name=>[name,{run:'exit 0',timeout_seconds:10}]))}}); write('workload/src/index.mjs','export const value=1;\n');write('src/auth/token.mjs','export const authenticated=true;\n');write('README.md','base\n');git('init');const base=commit();
   write('README.md','candidate\n');let revision=commit();
@@ -27,6 +31,15 @@ function fixture(t,agents=[]) {
 test('ordinary changes require one current independent human approval',t=>{
   const f=fixture(t), result=f.run();assert.equal(result.status,0,result.stderr || result.stdout);assert.equal(result.report.requiredApprovals,1);assert.equal(result.report.approvals.length,1);
   f.evidence.reviews=[];assert.equal(f.run().status,1);
+});
+
+test('a sole authorized human can approve a sensitive factory-authored PR',t=>{
+  const f=fixture(t,[],['aaron-howard'],1);f.change('scripts/sensitive.mjs','export const value=1;\n');
+  f.evidence.author='factory-bot[bot]';f.evidence.reviews[0].login='aaron-howard';
+  const approved=f.run();assert.equal(approved.status,0,approved.stdout);assert.equal(approved.report.requiredApprovals,1);
+  f.evidence.reviews[0].login='other-human';assert.equal(f.run().status,1,'the configured human owner must approve');
+  f.evidence.reviews[0].login='aaron-howard';f.evidence.reviews[0].type='Bot';assert.equal(f.run().status,1);
+  f.evidence.reviews[0].type='User';f.evidence.author='aaron-howard';assert.equal(f.run().status,1,'owner-authored PRs cannot be self-approved');
 });
 
 test('candidate policy cannot weaken the two-distinct-reviewer requirement for sensitive paths',t=>{

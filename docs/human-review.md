@@ -28,7 +28,8 @@ both old and new names for moves. Binary changes exceed the line threshold becau
 their line count cannot be established. The base must be an ancestor of the head;
 update a stale branch before retrying.
 
-The existing policy requires one approval by default and two for critical changes:
+The owner selected a solo-developer policy: one approval from `aaron-howard` for
+both ordinary and critical changes. Critical changes are still identified:
 mandatory path matches, more than 500 changed lines, database schema changes, or
 decreased line/branch coverage. Glob `**/` includes zero directories, so workflows
 directly beneath `.github/workflows` are covered. Database detection covers SQL,
@@ -45,7 +46,8 @@ the separate Quality coverage gate, even when humans approve a decrease.
 ## Approval identity and freshness
 
 Count distinct reviewers with a submitted APPROVED review for exactly the current
-head. Require GitHub User identity and current write/maintain/admin permission.
+head. Require GitHub User identity, membership in the trusted `human_approvers`
+list when configured, and current write/maintain/admin permission.
 Exclude bots, registered `agent_accounts`, the PR author, and owners of proposed
 exceptions. Latest approval/changes-requested/dismissal controls each reviewer;
 comments preserve the prior decision. Dismissed or old-head approvals do not count.
@@ -72,7 +74,9 @@ Main requires `Enforce Factory human approval` from GitHub Actions (app 15368),
 alongside Factory SAST, with strict up-to-date checks. The native ruleset requires
 one independent approval and retains stale-review dismissal, review-thread
 resolution, and its existing CodeQL/security/quality rules without bypass actors.
-The evaluated Factory gate raises the count to two for sensitive changes. Ticket #9 must
+The proposed solo-developer policy keeps the evaluated count at one for sensitive
+changes. Until that policy is governed and adopted on main, its previous two-review
+count remains authoritative for this bootstrap PR. Ticket #9 must
 complete protection drift, fork verification, trusted evaluator/workflow bootstrap,
 and the merge-time authorization boundary. This workflow currently runs the
 candidate evaluator under read-only permissions; loading policy from base does
@@ -80,10 +84,11 @@ not prevent a malicious PR from editing its own evaluator/workflow. Do not claim
 that boundary is solved until #9 lands. Native independent review requirements
 provide an additional hosted protection during this increment.
 
-The repository currently has only the PR author's account as collaborator. Add two
-independent human collaborators with write access before landing this sensitive
-implementation. Tests with synthetic review identities exercise decisions, but do
-not establish that real people approved the implementation.
+The repository has one human owner. Use the dedicated Factory GitHub App to author
+proposals and the owner account to approve them; GitHub does not allow authors to
+approve their own PRs. See [Factory App setup](factory-github-app.md). Existing
+owner-authored PR #26 needs replacement under the App identity. Tests with synthetic
+review identities exercise decisions but do not establish actual human approval.
 
 API contracts: [reviews](https://docs.github.com/en/rest/pulls/reviews),
 [reviewer permissions](https://docs.github.com/en/rest/collaborators), and

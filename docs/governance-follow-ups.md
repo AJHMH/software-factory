@@ -16,7 +16,11 @@ Restore enforcement only after these tracked requirements are demonstrated:
   Factory SAST check. Hosted clean/prohibited-result evidence is recorded on the ticket.
 - #8 adds independent human approvals for sensitive changes and exceptions,
   replacing the review status report with revision-bound evaluation. Its own
-  sensitive PR requires two real independent reviewers before landing.
+  policy is being adapted to the owner's solo-developer model: one authorized human
+  (`aaron-howard`) approves proposals authored by a dedicated Factory GitHub App.
+  Current PR #26 uses the owner's identity and requires replacement once the App
+  is installed. The previous main policy still requires two approvals until an
+  explicitly governed one-review policy bootstrap is adopted.
   Main now requires the evaluated human-review check and a native one-review
   minimum, retaining stale-review dismissal and existing protections. Hosted
   [missing-approval denial](https://github.com/AJHMH/software-factory/actions/runs/37157111221)

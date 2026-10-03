@@ -7,7 +7,7 @@ import { rawGit, evaluateCoverage } from './coverage-evaluation.mjs';
 
 /** @typedef {{id:number,login:string,type:'User'|'Bot',state:string,commit_id:string,submitted_at:string,permission:string}} Review */
 /** @typedef {{version:string,repository:string,pull_request:number,revision:string,base_revision:string,author:string,reviews:Review[]}} ReviewEvidence */
-/** @typedef {{mandatory_paths:string[],conditional_triggers:{lines_changed_threshold:number,decrease_in_test_coverage:boolean,modifies_database_schema:boolean},approvals_required:{default:number,critical_paths:number},agent_accounts?:string[]}} ReviewPolicy */
+/** @typedef {{mandatory_paths:string[],conditional_triggers:{lines_changed_threshold:number,decrease_in_test_coverage:boolean,modifies_database_schema:boolean},approvals_required:{default:number,critical_paths:number},agent_accounts?:string[],human_approvers?:string[]}} ReviewPolicy */
 const ajv=new Ajv.default({strict:true,allErrors:true});
 const policyValidator=ajv.compile(JSON.parse(readFileSync(new URL('../schemas/human-review-policy.schema.json',import.meta.url),'utf8')));
 const evidenceValidator=ajv.compile(JSON.parse(readFileSync(new URL('../schemas/human-review-evidence.schema.json',import.meta.url),'utf8')));
@@ -89,6 +89,7 @@ export function evaluateHumanReview(options,supplied=undefined) {
     }
     const requiredApprovals=triggers.length ? context.policy.approvals_required.critical_paths : context.policy.approvals_required.default;
     const agents=new Set((context.policy.agent_accounts ?? []).map(login=>login.toLowerCase()));
+    const authorizedHumans=context.policy.human_approvers ? new Set(context.policy.human_approvers.map(login=>login.toLowerCase())) : undefined;
     const exceptionOwners=new Set();
     for(const filename of ['policy-exceptions.yaml','policies/security-dummy-approvals.json']) {
       if(!files.includes(filename)) continue;
@@ -108,7 +109,7 @@ export function evaluateHumanReview(options,supplied=undefined) {
       // Comments do not erase approvals or requests for changes. Dismissals do erase their prior approval.
       if(review.state !== 'COMMENTED') latest.set(review.login.toLowerCase(),review);
     }
-    const human=/** @param {Review} review */(review)=>review.type === 'User' && !/\[bot\]$/i.test(review.login) && !agents.has(review.login.toLowerCase()) && !exceptionOwners.has(review.login.toLowerCase()) && review.login.toLowerCase() !== evidence.author.toLowerCase() && ['write','maintain','admin'].includes(review.permission);
+    const human=/** @param {Review} review */(review)=>review.type === 'User' && !/\[bot\]$/i.test(review.login) && (!authorizedHumans || authorizedHumans.has(review.login.toLowerCase())) && !agents.has(review.login.toLowerCase()) && !exceptionOwners.has(review.login.toLowerCase()) && review.login.toLowerCase() !== evidence.author.toLowerCase() && ['write','maintain','admin'].includes(review.permission);
     const approvals=[...latest.values()].filter(review=>human(review) && review.state === 'APPROVED' && review.commit_id === context.revision);
     const changesRequested=[...latest.values()].filter(review=>human(review) && review.state === 'CHANGES_REQUESTED');
     const passed=approvals.length >= requiredApprovals && !changesRequested.length;
