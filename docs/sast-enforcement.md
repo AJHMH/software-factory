@@ -5,6 +5,8 @@ JavaScript/TypeScript and build mode `none` in trusted `profiles/codeql.yaml`; n
 workload build or lifecycle script is required. GitHub manages the CodeQL version,
 which is recorded from each actual analysis. Existing Actions analysis and native
 security/quality/secret protections remain enabled.
+The native JavaScript/TypeScript analysis covers committed code across the repository,
+so findings in Factory tooling also undergo the same severity evaluation.
 
 ```sh
 node scripts/factory-validation.mjs collect-sast --trusted-revision <FULL_BASE_SHA> --repository <owner/repo> --ref refs/pull/<number>/head --output tmp/sast-evidence.json
@@ -50,3 +52,9 @@ and cannot by itself certify a release. Certification/publication remain blocked
 CI runs public-interface fixtures for clean findings, prohibited severities, warnings,
 stale/unsupported evidence, analysis/build error, and inaccessible analysis service.
 Hosted probe evidence and required-check configuration are recorded on ticket #7.
+
+The temporary command-injection probe in PR #25 produced a real critical CodeQL
+finding and a Factory `failed` policy result, distinct from analysis errors.
+[Hosted denial evidence](https://github.com/AJHMH/software-factory/actions/runs/37155656108).
+The probe is removed before merge. The main ruleset requires the evaluated SAST
+check from the GitHub Actions app (15368), with an up-to-date branch and no bypass.
