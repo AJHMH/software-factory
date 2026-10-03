@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "quality"
+  ],
+  "properties": {
+    "version": {
+      "enum": [
+        "1.0",
+        1
+      ]
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "testing",
+        "linting",
+        "release_readiness"
+      ],
+      "properties": {
+        "testing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "coverage_thresholds",
+            "allow_coverage_decrease",
+            "require_unit_tests",
+            "require_integration_tests"
+          ],
+          "properties": {
+            "coverage_thresholds": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "global_minimum_percentage",
+                "new_code_minimum_percentage"
+              ],
+              "properties": {
+                "global_minimum_percentage": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "new_code_minimum_percentage": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              }
+            },
+            "allow_coverage_decrease": {
+              "type": "boolean"
+            },
+            "require_unit_tests": {
+              "type": "boolean"
+            },
+            "require_integration_tests": {
+              "type": "boolean"
+            }
+          }
+        },
+        "linting": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "treat_warnings_as_errors",
+            "allow_suppression_comments"
+          ],
+          "properties": {
+            "treat_warnings_as_errors": {
+              "type": "boolean"
+            },
+            "allow_suppression_comments": {
+              "type": "boolean"
+            }
+          }
+        },
+        "release_readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "zero_open_defects_severity",
+            "max_open_defects_severity"
+          ],
+          "properties": {
+            "zero_open_defects_severity": {
+              "enum": [
+                "critical",
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "max_open_defects_severity": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "medium",
+                "low"
+              ],
+              "properties": {
+                "medium": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "low": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

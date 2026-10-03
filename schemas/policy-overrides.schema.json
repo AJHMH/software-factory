@@ -37,12 +37,26 @@
             "pattern": "\\S"
           },
           "rule": {
-            "const": "maximum_command_timeout_seconds"
+            "enum": [
+              "maximum_command_timeout_seconds",
+              "coverage.global_minimum_percentage",
+              "coverage.new_code_minimum_percentage",
+              "coverage.allow_coverage_decrease",
+              "coverage.require_unit_tests",
+              "coverage.require_integration_tests"
+            ]
           },
           "value": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 600
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 600
+              },
+              {
+                "type": "boolean"
+              }
+            ]
           },
           "workload_id": {
             "type": "string",
@@ -88,8 +102,87 @@
             "minLength": 1,
             "maxLength": 200,
             "pattern": "\\S"
+          },
+          "base_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "rule": {
+                  "const": "maximum_command_timeout_seconds"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "rule": {
+                  "enum": [
+                    "coverage.global_minimum_percentage",
+                    "coverage.new_code_minimum_percentage"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "base_revision"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "base_revision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{40}$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "rule": {
+                  "enum": [
+                    "coverage.allow_coverage_decrease",
+                    "coverage.require_unit_tests",
+                    "coverage.require_integration_tests"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "base_revision"
+              ],
+              "properties": {
+                "value": {
+                  "type": "boolean"
+                },
+                "base_revision": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{40}$"
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }
