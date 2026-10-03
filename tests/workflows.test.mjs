@@ -10,7 +10,6 @@ import { parse } from 'yaml';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixtures = [
   ['factory-ci.yml', 'validation-plane', 'contract-validation', true],
-  ['factory-agent-review.yml', 'code-quality-and-policy-review', 'policy-review', false],
   ['factory-release.yml', 'release-plane', 'release-certification', true],
   ['factory-dependencies.yml', 'evaluate-dependencies', 'dependency-automation', false],
   ['factory-health.yml', 'evaluate-health', 'health-monitoring', false],
@@ -102,11 +101,27 @@ test('coverage CI binds the candidate, baseline, and governing policy to GitHub 
   assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.equal(checkout.with['fetch-depth'], 0);
   assert.equal(checkout.with['persist-credentials'], false);
-  const gate = job.steps.at(-1);
+  const gate = job.steps.at(-2);
   assert.equal(gate.env.BASE_REVISION, '${{ github.event.pull_request.base.sha || github.event.before }}');
   assert.equal(gate.env.TRUSTED_POLICY_REVISION, '${{ github.event.pull_request.base.sha || github.event.before }}');
   assert.equal(gate.run, 'node scripts/factory-validation.mjs measure-coverage --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --output coverage/evidence.json');
-  assert.ok(job.steps.every(step => !step['continue-on-error'] && !step.if && !step.run?.includes('${{')));
+  assert.ok(job.steps.every(step => !step['continue-on-error'] && !step.run?.includes('${{')));
+  const artifact=job.steps.at(-1);assert.equal(artifact.uses,'actions/upload-artifact@v4');assert.equal(artifact.with.path,'coverage/evidence.json');assert.equal(artifact.with['if-no-files-found'],'error');assert.equal(artifact.with['retention-days'],7);
+});
+
+test('human review re-evaluates current PR heads on reviews and dismissals without write permissions',()=>{
+  const workflow=parse(readFileSync(join(root,'.github/workflows/factory-agent-review.yml'),'utf8'));
+  assert.deepEqual(workflow.permissions,{contents:'read','pull-requests':'read',actions:'read'});
+  assert.deepEqual(workflow.on.pull_request_review.types,['submitted','edited','dismissed']);
+  assert.ok(workflow.on.pull_request.types.includes('synchronize'));
+  assert.equal(workflow.concurrency['cancel-in-progress'],true);
+  assert.ok(!Object.hasOwn(workflow.on,'pull_request_target'));
+  const job=workflow.jobs['human-review'];assert.equal(job['continue-on-error'],undefined);
+  assert.equal(job.steps[0].with.ref,'${{ github.event.pull_request.head.sha }}');
+  assert.equal(job.steps[0].with['persist-credentials'],false);
+  const gate=job.steps.at(-1);assert.equal(gate.env.BASE_REVISION,'${{ github.event.pull_request.base.sha }}');
+  assert.ok(gate.run.includes('collect-reviews'));assert.ok(gate.run.includes('--coverage-evidence github'));
+  assert.ok(job.steps.every(step=>!step['continue-on-error'] && !step.run?.includes('${{')));
 });
 
 for (const [filename, jobName, capability, required] of fixtures) {

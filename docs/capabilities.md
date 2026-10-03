@@ -27,6 +27,10 @@ The public interface is `node scripts/factory-validation.mjs`:
 - `collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <ref>` retrieves
   and evaluates exact-revision native CodeQL evidence.
 - `sast --trusted-revision <SHA> --evidence <file>` evaluates CodeQL severity evidence.
+- `human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo>
+  --pull-request <number> --evidence <file>` evaluates current independent approvals.
+- `collect-reviews` accepts the same revision/PR context and reads live GitHub reviews;
+  `--coverage-evidence github --output <file>` collects workload comparison artifacts.
 - `certify` reports all mandatory release capabilities and always exits 1 with a
   `blocked` outcome. There is no publication or deployment step.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
@@ -41,11 +45,12 @@ summary. A successful reporting job is never a passing workload check.
 | Capability | Status | Mandatory for release | Next implementation |
 | --- | --- | --- | --- |
 | contract-validation | available; evidence requires execution | yes | #3 implemented; release evidence integration follows |
-| policy-review | available for execution limits; hosted human review unavailable | yes | #4 implemented locally; #8: Human approval |
+| policy-review | available for execution limits | yes | #4 implemented; #9/#14: hosted protections and certification |
 | coverage | available; actual measurement/evaluation required | yes | #5 implemented; #9/#14: hosted protections and certification |
 | secret-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
 | dependency-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
 | sast-policy | available; actual native analysis/evaluation required | yes | #7 implemented; #9/#14: governance and certification |
+| human-review | available; current independent approval evidence required | yes | #8 implemented; #9: trusted workflow and merge boundary |
 | release-certification | unsupported | yes | #14: Exact-revision certification |
 | agent-remediation | unsupported; writes disabled | no | #10/#11: Bounded, authorized remediation |
 | dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |
@@ -62,6 +67,7 @@ not enforced by this interface; changing a policy cannot enable a missing capabi
 ## GitHub workflow behavior
 
 Factory workflows use `contents: read`; SAST also uses `security-events: read`.
+Human Review also reads pull requests and Actions coverage artifacts.
 They disable checkout credential
 persistence, and have bounded job timeouts. No workflow approves or merges PRs,
 pushes code, creates fix PRs or incident issues, dispatches remediation, publishes
@@ -69,7 +75,7 @@ packages/releases, deploys, or rolls back workloads.
 
 CI installs Factory tools, selects the supported runtime from the validated
 contract, and executes the reference workload. Security runs pinned scanners;
-Agent Review reports unavailable integration status. Release
+Human Review evaluates current independent reviewers and sensitive changes. Release
 Certification remains blocked and intentionally fails. A separate CI job runs template tests and
 typechecking; its success must not replace workload-required checks in repository
 protections. Dependency and Health schedules only report unsupported status; they

@@ -1,5 +1,7 @@
 version: 1.0
 human_review:
+  # Register any automation operating through User accounts; never share a human reviewer identity with an agent.
+  agent_accounts: ["github-actions[bot]", "dependabot[bot]"]
   # Paths that automatically trigger a mandatory human review (blocking agent auto-merge)
   mandatory_paths:
     - "policies/**/*.yaml"
@@ -7,6 +9,10 @@ human_review:
     - ".github/workflows/**/*.yml"
     - "src/auth/**/*"
     - "src/payments/**/*"
+    - "scripts/**/*"
+    - "schemas/**/*"
+    - "profiles/**/*"
+    - "policy-exceptions.yaml"
 
   conditional_triggers:
     lines_changed_threshold: 500
