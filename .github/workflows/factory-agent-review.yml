@@ -1,27 +1,47 @@
-name: Factory Agent Review
+name: Factory Human Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
 
 permissions:
   contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: factory-human-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  code-quality-and-policy-review:
-    name: Report Factory review integration status
+  human-review:
+    name: Enforce Factory human approval
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Checkout
+      - name: Checkout exact PR head and policy history
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Factory tooling
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Report Factory capability inventory
-        run: node scripts/factory-validation.mjs inventory
-      - name: Report capability outcome
-        run: node scripts/factory-validation.mjs capability policy-review
+      - name: Install validation tooling
+        run: npm ci --ignore-scripts
+      - name: Create evidence directory
+        run: node -e "require('node:fs').mkdirSync('tmp', {recursive:true})"
+      - name: Verify current independent human approvals
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          BASE_REVISION: ${{ github.event.pull_request.base.sha }}
+          TRUSTED_POLICY_REVISION: ${{ vars.FACTORY_REVIEW_POLICY_REVISION || github.event.pull_request.base.sha }}
+        run: node scripts/factory-validation.mjs collect-reviews --repository "$REPOSITORY" --pull-request "$PULL_REQUEST" --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --coverage-evidence github --output tmp/human-review-evidence.json

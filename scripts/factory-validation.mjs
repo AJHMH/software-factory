@@ -39,6 +39,12 @@ const capabilities = {
     trackingIssue: 7,
     requiredForRelease: true,
   },
+  'human-review': {
+    reason: 'Human approval evaluation is available via human-review and collect-reviews; this report supplies no current approval evidence.',
+    available: true,
+    trackingIssue: 8,
+    requiredForRelease: true,
+  },
   'release-certification': {
     reason: 'Exact-revision validation, approval, and artifact evidence are not verified.',
     trackingIssue: 14,
@@ -78,6 +84,7 @@ function publish(report) {
       `## Factory ${report.operation}: ${report.outcome}`,
       '',
       report.operation === 'validate' ? 'These command results do not authorize a release or establish policy/security compliance.' :
+        report.operation === 'human-review' ? 'Approval evidence applies only to the named PR head and base; it does not authorize a release.' :
         report.operation === 'sast' ? 'CodeQL policy evidence applies only to the named revision; it does not authorize a release.' :
         report.operation === 'security' ? 'Redacted scanner evidence applies only to the named revision; it does not authorize a release.' :
         report.operation === 'coverage' ? 'Coverage and test evidence applies only to the named source revisions; it does not authorize a merge or release.' :
@@ -93,15 +100,15 @@ function publish(report) {
   console.log(JSON.stringify({ schemaVersion: 1, ...report }));
 }
 
-if (['policy', 'coverage', 'measure-coverage', 'security', 'scan-security', 'sast', 'collect-sast'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
-  args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', ...(['security','sast'].includes(command) ? ['--evidence'] : command === 'collect-sast' ? ['--repository','--ref','--output'] : command === 'scan-security' ? ['--tools-dir', '--output'] : ['--overrides', ...(command === 'coverage' ? ['--evidence', '--base-revision'] : command === 'measure-coverage' ? ['--base-revision', '--output'] : [])])].includes(arg)) &&
+if (['human-review', 'collect-reviews', 'policy', 'coverage', 'measure-coverage', 'security', 'scan-security', 'sast', 'collect-sast'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
+  args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', ...(['human-review','collect-reviews'].includes(command) ? ['--base-revision','--repository','--pull-request','--coverage-evidence', ...(command === 'human-review' ? ['--evidence'] : ['--output'])] : ['security','sast'].includes(command) ? ['--evidence'] : command === 'collect-sast' ? ['--repository','--ref','--output'] : command === 'scan-security' ? ['--tools-dir', '--output'] : ['--overrides', ...(command === 'coverage' ? ['--evidence', '--base-revision'] : command === 'measure-coverage' ? ['--base-revision', '--output'] : [])])].includes(arg)) &&
   new Set(args.filter((_, index) => index % 2 === 1)).size === (args.length - 1) / 2) {
   const { evaluatePolicy } = await import('./policy-evaluation.mjs');
   const options = Object.fromEntries(args.slice(1).reduce((entries, value, index, array) => {
     if (index % 2 === 0) entries.push([value, array[index + 1]]);
     return entries;
   }, /** @type {string[][]} */ ([])));
-  const report = command === 'collect-sast' ? await (await import('./sast-collection.mjs')).collectSast(options) : command === 'sast' ? (await import('./sast-evaluation.mjs')).evaluateSast(options) : command === 'scan-security' ? await (await import('./security-collection.mjs')).collectSecurity(options) : command === 'security' ? (await import('./security-evaluation.mjs')).evaluateSecurity(options) : command === 'measure-coverage' ? await (await import('./coverage-collection.mjs')).collectCoverage(options) : command === 'coverage' ? (await import('./coverage-evaluation.mjs')).evaluateCoverage(options) : evaluatePolicy(options);
+  const report = command === 'collect-reviews' ? await (await import('./review-collection.mjs')).collectReviews(options) : command === 'human-review' ? (await import('./human-review.mjs')).evaluateHumanReview(options) : command === 'collect-sast' ? await (await import('./sast-collection.mjs')).collectSast(options) : command === 'sast' ? (await import('./sast-evaluation.mjs')).evaluateSast(options) : command === 'scan-security' ? await (await import('./security-collection.mjs')).collectSecurity(options) : command === 'security' ? (await import('./security-evaluation.mjs')).evaluateSecurity(options) : command === 'measure-coverage' ? await (await import('./coverage-collection.mjs')).collectCoverage(options) : command === 'coverage' ? (await import('./coverage-evaluation.mjs')).evaluateCoverage(options) : evaluatePolicy(options);
   publish(report);
   process.exitCode = report.outcome === 'passed' ? 0 : 1;
 } else if ((command === 'validate' || command === 'profile') &&
@@ -132,6 +139,6 @@ if (['policy', 'coverage', 'measure-coverage', 'security', 'scan-security', 'sas
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }

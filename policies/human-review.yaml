@@ -1,5 +1,8 @@
 version: 1.0
 human_review:
+  human_approvers: ["aaron-howard"]
+  # Register any automation operating through User accounts; never share a human reviewer identity with an agent.
+  agent_accounts: ["github-actions[bot]", "dependabot[bot]", "ajhmh-software-factory[bot]"]
   # Paths that automatically trigger a mandatory human review (blocking agent auto-merge)
   mandatory_paths:
     - "policies/**/*.yaml"
@@ -7,6 +10,10 @@ human_review:
     - ".github/workflows/**/*.yml"
     - "src/auth/**/*"
     - "src/payments/**/*"
+    - "scripts/**/*"
+    - "schemas/**/*"
+    - "profiles/**/*"
+    - "policy-exceptions.yaml"
 
   conditional_triggers:
     lines_changed_threshold: 500
@@ -15,4 +22,4 @@ human_review:
 
   approvals_required:
     default: 1
-    critical_paths: 2
+    critical_paths: 1

@@ -14,10 +14,23 @@ Restore enforcement only after these tracked requirements are demonstrated:
   See [security enforcement](security-enforcement.md) for scope and limits.
 - #7 implements native exact-revision CodeQL severity evaluation and the required
   Factory SAST check. Hosted clean/prohibited-result evidence is recorded on the ticket.
-- #8: Verify independent human approvals for sensitive changes and exceptions.
-  Replace the review status report with actual revision-bound review evaluation.
+- #8 adds independent human approvals for sensitive changes and exceptions,
+  replacing the review status report with revision-bound evaluation. Its own
+  policy is being adapted to the owner's solo-developer model: one authorized human
+  (`aaron-howard`) approves proposals authored by a dedicated Factory GitHub App.
+  Current PR #26 uses the owner's identity and requires replacement once the App
+  is installed. The previous main policy still requires two approvals until an
+  explicitly governed one-review policy bootstrap is adopted.
+  Main now requires the evaluated human-review check and a native one-review
+  minimum, retaining stale-review dismissal and existing protections. Hosted
+  [missing-approval denial](https://github.com/AJHMH/software-factory/actions/runs/37157111221)
+  and [coverage-decrease denial](https://github.com/AJHMH/software-factory/actions/runs/37157226374)
+  were demonstrated on PR #26. The temporary uncovered source fixture is removed.
 - #9: Configure and verify required checks/rulesets, including the trusted-policy
   workflow after bootstrap. Verify forks and attempted self-weakening in GitHub.
+  Move Human Review's evaluator/workflow authority out of the candidate tree and
+  verify approval revocation, updated bases, and merge-time revalidation. A trusted
+  policy file alone does not prevent candidate evaluator/workflow tampering.
 - #14: Combine these results into exact-revision release certification; keep
   publication disabled until every required capability is verified.
 

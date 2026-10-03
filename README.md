@@ -11,9 +11,9 @@ trusted policy revisions and approved exceptions. The Node 24 profile now enforc
 revision-bound global and changed-code coverage through the CLI and CI.
 Pinned secret/dependency scans enforce revision-bound findings against trusted policy.
 Native CodeQL findings are evaluated against trusted severity policy.
-Hosted human review and release
-certification remain **unsupported**. Release certification deliberately fails until
-their implementations and evidence checks exist. Dependency merging, agent writes,
+Human approval evaluation checks current independent reviews against trusted policy.
+Release certification remains **unsupported** and deliberately fails until
+its implementation and evidence checks exist. Dependency merging, agent writes,
 release publication, deployment, health alerts, and rollback are disabled.
 
 See [the capability inventory and operator guide](docs/capabilities.md) for the
@@ -26,6 +26,8 @@ See [security enforcement](docs/security-enforcement.md) for pinned scanners,
 redacted evidence, severity thresholds, and scoped dummy approvals.
 See [CodeQL enforcement](docs/sast-enforcement.md) for native analysis identity,
 severity rules, error handling, and required checks.
+See [human approval enforcement](docs/human-review.md) for review counts, identity,
+freshness, exception ownership, and the remaining hosted trust boundary.
 Policies and agent personas describe target behavior; they do not enable automation
 or establish compliance. Passing template tests is not evidence of a clean workload.
 

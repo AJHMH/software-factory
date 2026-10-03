@@ -34,3 +34,11 @@ jobs:
           BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
           TRUSTED_POLICY_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/factory-validation.mjs measure-coverage --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --output coverage/evidence.json
+      - name: Retain revision-bound coverage comparison for human review
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-coverage-${{ github.event.pull_request.head.sha || github.sha }}
+          path: coverage/evidence.json
+          if-no-files-found: error
+          retention-days: 7
