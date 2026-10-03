@@ -15,6 +15,11 @@ meaning of each status, workflow behavior, and implementation tickets.
 Policies and agent personas describe target behavior; they do not enable automation
 or establish compliance. Passing template tests is not evidence of a clean workload.
 
+Code-quality and security review currently use GitHub's security policy, Dependabot
+alerts, code scanning alerts, and secret scanning alerts. CodeRabbit is not required.
+See [security review sources and availability](docs/security.md) and the
+[security policy](.github/SECURITY.md). Disabled or missing scans cannot pass a gate.
+
 ## Run the safety interface locally
 
 Install Node.js 24 or later. The capability interface needs no npm dependencies:

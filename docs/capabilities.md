@@ -59,6 +59,10 @@ reporting entry point; issue-comment and repository-dispatch triggers are remove
 
 The incomplete CodeQL/build setup is withdrawn until the supported workload and
 finding-severity gate exist. This baseline does not perform SAST or secret scanning.
+GitHub's security policy, Dependabot alerts, code scanning alerts, and secret
+scanning alerts are the selected review sources; CodeRabbit is not required.
+See [security review sources and hosted status](security.md). Selecting GitHub
+does not make disabled or unimplemented scanning gates pass.
 
 Before adopting the template, configure repository protections to require actual
 workload gates and read the reports. This repository does not provision or verify
