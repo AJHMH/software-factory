@@ -9,13 +9,13 @@ function run(...args) {
   return spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8' });
 }
 
-test('an unsupported required validation gate fails with an actionable result', () => {
+test('an implemented capability without executed evidence cannot satisfy a required gate', () => {
   const result = run('capability', 'contract-validation', '--required');
   assert.equal(result.status, 1);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.results[0].status, 'unsupported');
+  assert.equal(report.results[0].status, 'not-run');
   assert.equal(report.results[0].required, true);
-  assert.match(report.results[0].reason, /reference workload/i);
+  assert.match(report.results[0].reason, /no executed gate evidence/i);
   assert.equal(report.results[0].trackingIssue, 3);
 });
 
@@ -24,7 +24,8 @@ test('release certification is blocked by every unsupported mandatory capability
   assert.equal(result.status, 1);
   const report = JSON.parse(result.stdout);
   assert.equal(report.outcome, 'blocked');
-  for (const capability of ['contract-validation', 'policy-review', 'coverage', 'secret-scanning', 'dependency-scanning', 'sast-policy', 'release-certification']) {
+  assert.ok(report.results.some((gate) => gate.capability === 'contract-validation' && gate.status === 'not-run'));
+  for (const capability of ['policy-review', 'coverage', 'secret-scanning', 'dependency-scanning', 'sast-policy', 'release-certification']) {
     assert.ok(report.results.some((gate) => gate.capability === capability && gate.required && gate.status === 'unsupported'));
   }
   assert.ok(report.results.every((gate) => gate.status !== 'passed'));
@@ -46,7 +47,8 @@ test('operators can inventory every capability without implying any gate passed'
   const report = JSON.parse(result.stdout);
   assert.equal(report.outcome, 'unsupported');
   assert.equal(report.results.length, 11);
-  assert.ok(report.results.every((gate) => gate.status === 'unsupported' && gate.reason && gate.trackingIssue));
+  assert.ok(report.results.some((gate) => gate.capability === 'contract-validation' && gate.status === 'available'));
+  assert.ok(report.results.every((gate) => ['available', 'unsupported'].includes(gate.status) && gate.reason && gate.trackingIssue));
 });
 
 test('invalid invocations cannot silently turn a mandatory request into a passing gate', () => {

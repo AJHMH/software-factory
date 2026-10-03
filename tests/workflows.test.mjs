@@ -18,7 +18,7 @@ const fixtures = [
   ['factory-remediation.yml', 'auto-remediate', 'agent-remediation', false],
 ];
 
-test('workflow fixtures cannot approve, mutate, publish, or hide unsupported required gates', () => {
+test('workflow fixtures cannot approve, push, publish, or hide unsupported required gates', () => {
   for (const [filename] of fixtures) {
     const workflow = parse(readFileSync(join(root, '.github/workflows', filename), 'utf8'));
     assert.deepEqual(workflow.permissions, { contents: 'read' }, filename);
@@ -31,7 +31,7 @@ test('workflow fixtures cannot approve, mutate, publish, or hide unsupported req
           assert.ok(['actions/checkout@v4', 'actions/setup-node@v4'].includes(step.uses), filename);
           if (step.uses === 'actions/checkout@v4') assert.equal(step.with['persist-credentials'], false, filename);
         } else {
-          assert.ok(/^(node scripts\/factory-validation\.mjs (inventory|certify|capability [a-z-]+(?: --required)?)|npm (ci --ignore-scripts|run typecheck|test))$/.test(step.run.trim()), filename);
+          assert.ok(/^(node scripts\/factory-validation\.mjs (inventory|profile|validate|certify|capability [a-z-]+(?: --required)?)|npm (ci --ignore-scripts|run typecheck|test))$/.test(step.run.trim()), filename);
           assert.equal(step.if, undefined, filename);
         }
       }
@@ -40,7 +40,7 @@ test('workflow fixtures cannot approve, mutate, publish, or hide unsupported req
 });
 
 for (const [filename, jobName, capability, required] of fixtures) {
-  test(`${filename} reports unsupported and ${required ? 'blocks the required gate' : 'leaves optional automation disabled'}`, () => {
+  test(`${filename} ${filename === 'factory-ci.yml' ? 'executes the reference workload' : required ? 'blocks unsupported required gates' : 'reports optional automation disabled'}`, () => {
     const workflow = parse(readFileSync(join(root, '.github/workflows', filename), 'utf8'));
     const job = workflow.jobs[jobName];
     assert.equal(job.if, undefined, 'A supported event must not silently skip reporting');
@@ -52,6 +52,7 @@ for (const [filename, jobName, capability, required] of fixtures) {
     try {
       const outcomes = [];
       for (const step of job.steps.filter((entry) => entry.run)) {
+        if (step.run === 'npm ci --ignore-scripts') continue; // Tool installation is exercised by CI; the fixture host already installed them.
         const [runtime, script, ...args] = step.run.trim().split(/\s+/);
         assert.equal(runtime, 'node');
         const result = spawnSync(process.execPath, [join(root, script), ...args], {
@@ -65,10 +66,19 @@ for (const [filename, jobName, capability, required] of fixtures) {
       }
       assert.ok(outcomes.length > 0, 'Workflow must actually invoke a gate');
       const outcome = outcomes.at(-1);
-      assert.equal(outcome.status, required ? 1 : 0);
+      const executesContract = filename === 'factory-ci.yml';
+      assert.equal(outcome.status, required && !executesContract ? 1 : 0);
       const report = JSON.parse(outcome.stdout);
-      assert.equal(report.outcome, required ? 'blocked' : 'unsupported');
-      assert.ok(report.results.some((gate) => gate.capability === capability && gate.required === required && gate.status === 'unsupported'));
+      assert.equal(report.outcome, executesContract ? 'passed' : required ? 'blocked' : 'unsupported');
+      if (executesContract) {
+        assert.equal(report.operation, 'validate');
+        assert.deepEqual(report.results.map((gate) => gate.capability), ['install', 'validate', 'test', 'build']);
+        assert.ok(report.results.every((gate) => gate.status === 'passed'));
+        const runtimeStep = job.steps.find((step) => step.name === 'Set up selected workload runtime');
+        assert.equal(runtimeStep.with['node-version'], '${{ steps.profile.outputs.node_version }}');
+      } else {
+        assert.ok(report.results.some((gate) => gate.capability === capability && gate.required === required && gate.status === 'unsupported'));
+      }
       assert.match(readFileSync(summary, 'utf8'), /not evidence of a clean workload check or permission to act/);
     } finally {
       rmSync(directory, { recursive: true, force: true });
