@@ -23,10 +23,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Install pinned Factory tools
+        run: npm ci --ignore-scripts
+      - name: Validate contract and select workload profile
+        id: profile
+        run: node scripts/factory-validation.mjs profile
+      - name: Set up selected workload runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.profile.outputs.node_version }}
       - name: Report Factory capability inventory
         run: node scripts/factory-validation.mjs inventory
-      - name: Report capability outcome
-        run: node scripts/factory-validation.mjs capability contract-validation --required
+      - name: Execute workload contract
+        run: node scripts/factory-validation.mjs validate
 
   factory-template-tests:
     name: Verify Factory safety controls

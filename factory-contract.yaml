@@ -1,35 +1,20 @@
-version: 1.0
+version: "1.0"
 
-# The Factory Contract
-# Every repository must implement this contract. The Factory reads this file
-# to understand how to build, test, and deploy this specific workload without
-# needing custom CI/CD pipelines.
-
+# A runnable reference workload, not a deployment or release authorization.
 contract:
-  # Metadata for the Factory Brain
-  workload_id: "example-product-service"
-  language: "node"
-  runtime_version: "20.x"
-  
+  workload_id: "factory-reference-workload"
+  profile: "node-24"
+  working_directory: "examples/reference-workload"
   commands:
-    # Mandatory Validation Plane gates
-    install: "npm ci"
-    validate: "npm run lint && npm run type-check"
-    test: "npm run test:coverage"
-    build: "npm run build"
-    
-  # Required Conventions
-  semver_required: true
-  changelog_required: true
-
-  # Operations Plane configuration
-  health:
-    health_endpoint_required: true
-    path: "/api/v1/health"
-    port: 3000
-
-  # Deployment Hooks (Called by the Release/Operations Agents)
-  deployment:
-    strategy: "rolling" # rolling, blue-green, canary
-    dockerfile_path: "./Dockerfile"
-    publish_registry: "ghcr.io"
+    install:
+      run: "npm ci --ignore-scripts"
+      timeout_seconds: 120
+    validate:
+      run: "npm run lint && npm run typecheck"
+      timeout_seconds: 60
+    test:
+      run: "npm test"
+      timeout_seconds: 60
+    build:
+      run: "npm run build"
+      timeout_seconds: 60

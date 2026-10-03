@@ -2,17 +2,19 @@
 
 ## Status and guarantees
 
-The implemented capability is truthful, read-only readiness reporting. The Factory
-does not yet execute or certify workload gates. Every workload capability below is
-unsupported, and optional mutation paths are disabled. This is the safe baseline
-delivered by issue #2, not a Governed Automation readiness claim.
+The Factory provides truthful readiness reporting and executable contract validation
+for a Node 24 reference workload. Other required gates remain unsupported and
+optional mutation paths are disabled. This extends issue #2's safe baseline;
+it is not a Governed Automation readiness claim.
 
 The public interface is `node scripts/factory-validation.mjs`:
 
 - `inventory` reports all capabilities and exits 0; it does not approve delivery.
-- `capability <name>` reports an optional capability and exits 0 with an
-  `unsupported` outcome. No action is performed and no gate has passed.
-- `capability <name> --required` reports the unsupported capability and exits 1.
+- `capability <name>` reports metadata and exits 0. Available execution reports
+  not-run; unsupported capabilities report unsupported. No gate has passed.
+- `capability <name> --required` exits 1 without executed evidence.
+- `profile` validates a contract and returns its selected runtime without execution.
+- `validate` executes the supported contract and exits 0 only if all commands pass.
 - `certify` reports all mandatory release capabilities and always exits 1 with a
   `blocked` outcome. There is no publication or deployment step.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
@@ -26,7 +28,7 @@ summary. A successful reporting job is never a passing workload check.
 
 | Capability | Status | Mandatory for release | Next implementation |
 | --- | --- | --- | --- |
-| contract-validation | unsupported | yes | #3: Reference workload and contract execution |
+| contract-validation | available; evidence requires execution | yes | #3 implemented; release evidence integration follows |
 | policy-review | unsupported | yes | #4: Trusted policies; #8: Human approval |
 | coverage | unsupported | yes | #5: Coverage enforcement |
 | secret-scanning | unsupported | yes | #6: Real security scans |
@@ -38,6 +40,8 @@ summary. A successful reporting job is never a passing workload check.
 | health-monitoring | unsupported; alerts/rollback disabled | no | #17/#18: Monitoring and rollback |
 | release-publication | unsupported; publication/deployment disabled | no | #15/#16: Publication and deployment |
 
+See [contract execution](contract-execution.md) for schema, runtime, shell,
+timeouts, revision metadata, and example workload.
 The release-required list is a fixed conservative baseline. YAML policies are not
 parsed or enforced by this readiness interface; changing a policy cannot enable a
 missing capability. Schema validation, profile-aware requirements, approved
@@ -50,8 +54,9 @@ persistence, and have bounded job timeouts. No workflow approves or merges PRs,
 pushes code, creates fix PRs or incident issues, dispatches remediation, publishes
 packages/releases, deploys, or rolls back workloads.
 
-CI validation, Security, Agent Review, and Release Certification report unsupported
-capabilities and intentionally fail. A separate CI job runs template tests and
+CI installs Factory tools, selects the supported runtime from the validated
+contract, and executes the reference workload. Security, Agent Review, and Release
+Certification remain unsupported and intentionally fail. A separate CI job runs template tests and
 typechecking; its success must not replace workload-required checks in repository
 protections. Dependency and Health schedules only report unsupported status; they
 do not maintain dependencies or measure health. Remediation has only a manual

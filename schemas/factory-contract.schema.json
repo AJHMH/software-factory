@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:software-factory:contract:1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "contract"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workload_id", "profile", "working_directory", "commands"],
+      "properties": {
+        "workload_id": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$" },
+        "profile": { "const": "node-24" },
+        "working_directory": { "type": "string", "minLength": 1 },
+        "commands": {
+          "type": "object", "additionalProperties": false,
+          "required": ["install", "validate", "test", "build"],
+          "properties": {
+            "install": { "$ref": "#/definitions/command" },
+            "validate": { "$ref": "#/definitions/command" },
+            "test": { "$ref": "#/definitions/command" },
+            "build": { "$ref": "#/definitions/command" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "command": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run", "timeout_seconds"],
+      "properties": {
+        "run": { "type": "string", "pattern": "\\S", "maxLength": 4096 },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 600 }
+      }
+    }
+  }
+}
