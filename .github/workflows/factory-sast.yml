@@ -1,0 +1,39 @@
+name: Factory SAST Policy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: read
+
+jobs:
+  sast:
+    name: Enforce Factory SAST policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact source revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Factory tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Factory dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Prepare redacted evidence directory
+        run: node -e "require('node:fs').mkdirSync('tmp', {recursive:true})"
+      - name: Evaluate exact-revision native CodeQL analysis
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+          TRUSTED_POLICY_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/factory-validation.mjs collect-sast --trusted-revision "$TRUSTED_POLICY_REVISION" --repository "$REPOSITORY" --ref "$SOURCE_REF" --output tmp/sast-evidence.json

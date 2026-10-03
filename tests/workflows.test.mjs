@@ -54,6 +54,20 @@ test('security CI scans the exact head with base policy and no write credentials
   assert.equal(ci.jobs['factory-template-tests'].steps.at(-1).env.FACTORY_SECURITY_INTEGRATION,'1');
 });
 
+test('SAST CI evaluates exact-head native analyses with read-only security permissions',()=>{
+  const workflow=parse(readFileSync(join(root,'.github/workflows/factory-sast.yml'),'utf8'));
+  assert.deepEqual(workflow.permissions,{contents:'read','security-events':'read'});
+  assert.ok(!Object.hasOwn(workflow.on,'pull_request_target'));
+  const job=workflow.jobs.sast;
+  assert.equal(job['timeout-minutes'],8);
+  assert.equal(job.steps[0].with.ref,'${{ github.event.pull_request.head.sha || github.sha }}');
+  assert.equal(job.steps[0].with['persist-credentials'],false);
+  assert.equal(job.steps.at(-1).env.TRUSTED_POLICY_REVISION,'${{ github.event.pull_request.base.sha || github.event.before }}');
+  assert.equal(job.steps.at(-1).env.SOURCE_REF,"${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}");
+  assert.ok(job.steps.every(step=>!step.if && !step['continue-on-error'] && !step.run?.includes('${{')));
+  assert.ok(job.steps.at(-1).run.includes('collect-sast'));
+});
+
 test('the trusted policy workflow never runs candidate code or uses candidate policy authority', () => {
   const workflow = parse(readFileSync(join(root, '.github/workflows/factory-policy.yml'), 'utf8'));
   assert.deepEqual(Object.keys(workflow.on), ['pull_request_target']);

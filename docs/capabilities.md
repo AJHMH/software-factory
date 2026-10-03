@@ -24,6 +24,9 @@ The public interface is `node scripts/factory-validation.mjs`:
   revision-bound coverage evidence without executing tests.
 - `scan-security --trusted-revision <SHA>` scans committed source with pinned scanners.
 - `security --trusted-revision <SHA> --evidence <file>` evaluates redacted security evidence.
+- `collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <ref>` retrieves
+  and evaluates exact-revision native CodeQL evidence.
+- `sast --trusted-revision <SHA> --evidence <file>` evaluates CodeQL severity evidence.
 - `certify` reports all mandatory release capabilities and always exits 1 with a
   `blocked` outcome. There is no publication or deployment step.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
@@ -42,7 +45,7 @@ summary. A successful reporting job is never a passing workload check.
 | coverage | available; actual measurement/evaluation required | yes | #5 implemented; #9/#14: hosted protections and certification |
 | secret-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
 | dependency-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
-| sast-policy | unsupported | yes | #7: CodeQL severity enforcement |
+| sast-policy | available; actual native analysis/evaluation required | yes | #7 implemented; #9/#14: governance and certification |
 | release-certification | unsupported | yes | #14: Exact-revision certification |
 | agent-remediation | unsupported; writes disabled | no | #10/#11: Bounded, authorized remediation |
 | dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |
@@ -58,7 +61,8 @@ not enforced by this interface; changing a policy cannot enable a missing capabi
 
 ## GitHub workflow behavior
 
-All Factory workflows use only `contents: read`, disable checkout credential
+Factory workflows use `contents: read`; SAST also uses `security-events: read`.
+They disable checkout credential
 persistence, and have bounded job timeouts. No workflow approves or merges PRs,
 pushes code, creates fix PRs or incident issues, dispatches remediation, publishes
 packages/releases, deploys, or rolls back workloads.

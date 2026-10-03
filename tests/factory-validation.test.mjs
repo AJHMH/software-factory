@@ -27,8 +27,8 @@ test('release certification is blocked by every unsupported mandatory capability
   assert.ok(report.results.some((gate) => gate.capability === 'contract-validation' && gate.status === 'not-run'));
   assert.ok(report.results.some((gate) => gate.capability === 'policy-review' && gate.status === 'not-run'));
   assert.ok(report.results.some((gate) => gate.capability === 'coverage' && gate.status === 'not-run'));
-  for (const capability of ['secret-scanning', 'dependency-scanning']) assert.ok(report.results.some(gate=>gate.capability === capability && gate.required && gate.status === 'not-run'));
-  for (const capability of ['sast-policy', 'release-certification']) {
+  for (const capability of ['secret-scanning', 'dependency-scanning', 'sast-policy']) assert.ok(report.results.some(gate=>gate.capability === capability && gate.required && gate.status === 'not-run'));
+  for (const capability of ['release-certification']) {
     assert.ok(report.results.some((gate) => gate.capability === capability && gate.required && gate.status === 'unsupported'));
   }
   assert.ok(report.results.every((gate) => gate.status !== 'passed'));
