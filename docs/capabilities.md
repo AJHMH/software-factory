@@ -3,7 +3,8 @@
 ## Status and guarantees
 
 The Factory provides truthful readiness reporting and executable contract validation
-for a Node 24 reference workload. Other required gates remain unsupported and
+for a Node 24 reference workload, plus scoped trusted execution-policy evaluation.
+Other required gates remain unsupported and
 optional mutation paths are disabled. This extends issue #2's safe baseline;
 it is not a Governed Automation readiness claim.
 
@@ -15,6 +16,8 @@ The public interface is `node scripts/factory-validation.mjs`:
 - `capability <name> --required` exits 1 without executed evidence.
 - `profile` validates a contract and returns its selected runtime without execution.
 - `validate` executes the supported contract and exits 0 only if all commands pass.
+- `policy --trusted-revision <SHA>` evaluates contract execution limits against
+  committed trusted policy and approved exceptions; it does not execute commands.
 - `certify` reports all mandatory release capabilities and always exits 1 with a
   `blocked` outcome. There is no publication or deployment step.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
@@ -29,7 +32,7 @@ summary. A successful reporting job is never a passing workload check.
 | Capability | Status | Mandatory for release | Next implementation |
 | --- | --- | --- | --- |
 | contract-validation | available; evidence requires execution | yes | #3 implemented; release evidence integration follows |
-| policy-review | unsupported | yes | #4: Trusted policies; #8: Human approval |
+| policy-review | available for execution limits; hosted human review unavailable | yes | #4 implemented locally; #8: Human approval |
 | coverage | unsupported | yes | #5: Coverage enforcement |
 | secret-scanning | unsupported | yes | #6: Real security scans |
 | dependency-scanning | unsupported | yes | #6: Dependency findings |
@@ -42,14 +45,14 @@ summary. A successful reporting job is never a passing workload check.
 
 See [contract execution](contract-execution.md) for schema, runtime, shell,
 timeouts, revision metadata, and example workload.
-The release-required list is a fixed conservative baseline. YAML policies are not
-parsed or enforced by this readiness interface; changing a policy cannot enable a
-missing capability. Schema validation, profile-aware requirements, approved
-exceptions, and actual gate evidence follow in the implementation tickets.
+The release-required list is a fixed conservative baseline. See
+[trusted policy evaluation](policy-evaluation.md) for the versioned execution pack,
+profile precedence, and approved exceptions. Other YAML policy declarations are
+not enforced by this interface; changing a policy cannot enable a missing capability.
 
 ## GitHub workflow behavior
 
-All seven workflows use only `contents: read`, disable checkout credential
+All Factory workflows use only `contents: read`, disable checkout credential
 persistence, and have bounded job timeouts. No workflow approves or merges PRs,
 pushes code, creates fix PRs or incident issues, dispatches remediation, publishes
 packages/releases, deploys, or rolls back workloads.
@@ -61,6 +64,10 @@ typechecking; its success must not replace workload-required checks in repositor
 protections. Dependency and Health schedules only report unsupported status; they
 do not maintain dependencies or measure health. Remediation has only a manual
 reporting entry point; issue-comment and repository-dispatch triggers are removed.
+
+The new Trusted Policy workflow reads evaluator and policy from the base revision,
+with candidate files used as data only. It requires governance-approved bootstrap
+before it can operate in GitHub; its green result is execution-policy evidence only.
 
 The incomplete CodeQL/build setup is withdrawn until the supported workload and
 finding-severity gate exist. This baseline does not perform SAST or secret scanning.

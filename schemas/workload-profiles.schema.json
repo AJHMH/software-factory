@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "profiles"
+  ],
+  "properties": {
+    "version": {
+      "const": "1.0"
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "maximum_command_timeout_seconds"
+        ],
+        "properties": {
+          "id": {
+            "const": "node-24"
+          },
+          "maximum_command_timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          }
+        }
+      }
+    }
+  }
+}

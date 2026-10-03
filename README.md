@@ -6,13 +6,17 @@ This repository is currently a safe scaffold, not an operational delivery platfo
 ## Current capability status
 
 Contract validation and the Node 24 reference workload execute locally and in CI.
-Policy review, coverage enforcement, Factory security gates, and release
+Scoped execution-policy evaluation is available through the public CLI, with
+trusted policy revisions and approved exceptions. Hosted human review, coverage
+enforcement, Factory security gates, and release
 certification remain **unsupported**. Those required gates deliberately fail until
 their implementations and evidence checks exist. Dependency merging, agent writes,
 release publication, deployment, health alerts, and rollback are disabled.
 
 See [the capability inventory and operator guide](docs/capabilities.md) for the
 meaning of each status, workflow behavior, and implementation tickets.
+See [trusted policy evaluation](docs/policy-evaluation.md) for precedence,
+exception approvals, and the trusted GitHub workflow bootstrap.
 Policies and agent personas describe target behavior; they do not enable automation
 or establish compliance. Passing template tests is not evidence of a clean workload.
 
