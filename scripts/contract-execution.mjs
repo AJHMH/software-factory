@@ -43,10 +43,11 @@ function revisionEvidence(cwd) {
 }
 
 /** @param {Command} command @param {string} cwd */
-async function execute(command, cwd) {
+export async function execute(command, cwd) {
   const startedAt = new Date().toISOString();
   const windows = process.platform === 'win32';
   const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
   delete env.GITHUB_OUTPUT;
   delete env.GITHUB_STEP_SUMMARY;
   let stdout = '';

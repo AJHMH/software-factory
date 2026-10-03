@@ -63,6 +63,23 @@ test('the trusted policy workflow never runs candidate code or uses candidate po
   assert.ok(job.steps.every(step => !step['continue-on-error'] && !step.if && !step.run?.includes('${{')));
 });
 
+test('coverage CI binds the candidate, baseline, and governing policy to GitHub revision metadata', () => {
+  const workflow = parse(readFileSync(join(root, '.github/workflows/factory-coverage.yml'), 'utf8'));
+  assert.deepEqual(workflow.permissions, { contents: 'read' });
+  const job = workflow.jobs.coverage;
+  assert.equal(job['timeout-minutes'], 10);
+  assert.equal(job.permissions, undefined);
+  const checkout = job.steps[0];
+  assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha || github.sha }}');
+  assert.equal(checkout.with['fetch-depth'], 0);
+  assert.equal(checkout.with['persist-credentials'], false);
+  const gate = job.steps.at(-1);
+  assert.equal(gate.env.BASE_REVISION, '${{ github.event.pull_request.base.sha || github.event.before }}');
+  assert.equal(gate.env.TRUSTED_POLICY_REVISION, '${{ github.event.pull_request.base.sha || github.event.before }}');
+  assert.equal(gate.run, 'node scripts/factory-validation.mjs measure-coverage --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --output coverage/evidence.json');
+  assert.ok(job.steps.every(step => !step['continue-on-error'] && !step.if && !step.run?.includes('${{')));
+});
+
 for (const [filename, jobName, capability, required] of fixtures) {
   test(`${filename} ${filename === 'factory-ci.yml' ? 'executes the reference workload' : required ? 'blocks unsupported required gates' : 'reports optional automation disabled'}`, () => {
     const workflow = parse(readFileSync(join(root, '.github/workflows', filename), 'utf8'));

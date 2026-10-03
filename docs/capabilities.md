@@ -18,6 +18,10 @@ The public interface is `node scripts/factory-validation.mjs`:
 - `validate` executes the supported contract and exits 0 only if all commands pass.
 - `policy --trusted-revision <SHA>` evaluates contract execution limits against
   committed trusted policy and approved exceptions; it does not execute commands.
+- `measure-coverage --base-revision <SHA> --trusted-revision <SHA>` runs the Node
+  coverage adapter and enforces trusted Quality policy on committed source snapshots.
+- `coverage --evidence <file> --base-revision <SHA> --trusted-revision <SHA>` evaluates
+  revision-bound coverage evidence without executing tests.
 - `certify` reports all mandatory release capabilities and always exits 1 with a
   `blocked` outcome. There is no publication or deployment step.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
@@ -33,7 +37,7 @@ summary. A successful reporting job is never a passing workload check.
 | --- | --- | --- | --- |
 | contract-validation | available; evidence requires execution | yes | #3 implemented; release evidence integration follows |
 | policy-review | available for execution limits; hosted human review unavailable | yes | #4 implemented locally; #8: Human approval |
-| coverage | unsupported | yes | #5: Coverage enforcement |
+| coverage | available; actual measurement/evaluation required | yes | #5 implemented; #9/#14: hosted protections and certification |
 | secret-scanning | unsupported | yes | #6: Real security scans |
 | dependency-scanning | unsupported | yes | #6: Dependency findings |
 | sast-policy | unsupported | yes | #7: CodeQL severity enforcement |
