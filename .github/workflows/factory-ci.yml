@@ -54,5 +54,9 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Typecheck Factory interface
         run: npm run typecheck
+      - name: Install checksum-verified pinned security scanners
+        run: node scripts/install-security-tools.mjs
       - name: Test public interface and workflow fixtures
+        env:
+          FACTORY_SECURITY_INTEGRATION: '1'
         run: npm test

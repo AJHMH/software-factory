@@ -22,12 +22,14 @@ const capabilities = {
     requiredForRelease: true,
   },
   'secret-scanning': {
-    reason: 'Factory secret-scanning evidence is not evaluated; hosted GitHub scanning alone does not satisfy this gate.',
+    reason: 'Pinned secret scanning is available via scan-security; this report supplies no executed scan evidence.',
+    available: true,
     trackingIssue: 6,
     requiredForRelease: true,
   },
   'dependency-scanning': {
-    reason: 'Dependency findings are not evaluated against Security policy.',
+    reason: 'Pinned dependency scanning is available via scan-security; this report supplies no executed scan evidence.',
+    available: true,
     trackingIssue: 6,
     requiredForRelease: true,
   },
@@ -75,6 +77,7 @@ function publish(report) {
       `## Factory ${report.operation}: ${report.outcome}`,
       '',
       report.operation === 'validate' ? 'These command results do not authorize a release or establish policy/security compliance.' :
+        report.operation === 'security' ? 'Redacted scanner evidence applies only to the named revision; it does not authorize a release.' :
         report.operation === 'coverage' ? 'Coverage and test evidence applies only to the named source revisions; it does not authorize a merge or release.' :
         report.operation === 'policy' ? 'Execution-policy evaluation only: no workload commands executed, hosted human approval verified, or release authorized.' :
         'This is a capability report, not evidence of a clean workload check or permission to act.',
@@ -88,15 +91,15 @@ function publish(report) {
   console.log(JSON.stringify({ schemaVersion: 1, ...report }));
 }
 
-if (['policy', 'coverage', 'measure-coverage'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
-  args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', '--overrides', ...(command === 'coverage' ? ['--evidence', '--base-revision'] : command === 'measure-coverage' ? ['--base-revision', '--output'] : [])].includes(arg)) &&
+if (['policy', 'coverage', 'measure-coverage', 'security', 'scan-security'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
+  args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', ...(command === 'security' ? ['--evidence'] : command === 'scan-security' ? ['--tools-dir', '--output'] : ['--overrides', ...(command === 'coverage' ? ['--evidence', '--base-revision'] : command === 'measure-coverage' ? ['--base-revision', '--output'] : [])])].includes(arg)) &&
   new Set(args.filter((_, index) => index % 2 === 1)).size === (args.length - 1) / 2) {
   const { evaluatePolicy } = await import('./policy-evaluation.mjs');
   const options = Object.fromEntries(args.slice(1).reduce((entries, value, index, array) => {
     if (index % 2 === 0) entries.push([value, array[index + 1]]);
     return entries;
   }, /** @type {string[][]} */ ([])));
-  const report = command === 'measure-coverage' ? await (await import('./coverage-collection.mjs')).collectCoverage(options) : command === 'coverage' ? (await import('./coverage-evaluation.mjs')).evaluateCoverage(options) : evaluatePolicy(options);
+  const report = command === 'scan-security' ? await (await import('./security-collection.mjs')).collectSecurity(options) : command === 'security' ? (await import('./security-evaluation.mjs')).evaluateSecurity(options) : command === 'measure-coverage' ? await (await import('./coverage-collection.mjs')).collectCoverage(options) : command === 'coverage' ? (await import('./coverage-evaluation.mjs')).evaluateCoverage(options) : evaluatePolicy(options);
   publish(report);
   process.exitCode = report.outcome === 'passed' ? 0 : 1;
 } else if ((command === 'validate' || command === 'profile') &&
@@ -127,6 +130,6 @@ if (['policy', 'coverage', 'measure-coverage'].includes(command) && args.length 
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }
