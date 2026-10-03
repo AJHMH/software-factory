@@ -8,7 +8,7 @@ contract:
   commands:
     install:
       run: "npm ci --ignore-scripts"
-      timeout_seconds: 120
+      timeout_seconds: 240
     validate:
       run: "npm run lint && npm run typecheck"
       timeout_seconds: 60
