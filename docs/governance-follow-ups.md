@@ -17,6 +17,11 @@ Restore enforcement only after these tracked requirements are demonstrated:
 - #8 adds independent human approvals for sensitive changes and exceptions,
   replacing the review status report with revision-bound evaluation. Its own
   sensitive PR requires two real independent reviewers before landing.
+  Main now requires the evaluated human-review check and a native one-review
+  minimum, retaining stale-review dismissal and existing protections. Hosted
+  [missing-approval denial](https://github.com/AJHMH/software-factory/actions/runs/37157111221)
+  and [coverage-decrease denial](https://github.com/AJHMH/software-factory/actions/runs/37157226374)
+  were demonstrated on PR #26. The temporary uncovered source fixture is removed.
 - #9: Configure and verify required checks/rulesets, including the trusted-policy
   workflow after bootstrap. Verify forks and attempted self-weakening in GitHub.
   Move Human Review's evaluator/workflow authority out of the candidate tree and

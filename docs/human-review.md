@@ -7,7 +7,7 @@ approves a PR or grants a policy exception.
 
 ```sh
 node scripts/factory-validation.mjs collect-reviews \
-  --repository AJHMH/software-factory --pull-request 26 \
+  --repository AJHMH/software-factory --pull-request <number> \
   --base-revision <full-base-SHA> --trusted-revision <full-policy-SHA> \
   --coverage-evidence github --output tmp/human-review-evidence.json
 ```
@@ -68,8 +68,11 @@ a bounded archive, and validates its content; it never executes an artifact.
 Evidence is limited to hashes, counts, paths, reviewer identities, and review IDs.
 Review bodies and credentials are excluded.
 
-Configure `Enforce Factory human approval` as a required GitHub Actions check and
-retain native stale-review dismissal and review-thread resolution. Ticket #9 must
+Main requires `Enforce Factory human approval` from GitHub Actions (app 15368),
+alongside Factory SAST, with strict up-to-date checks. The native ruleset requires
+one independent approval and retains stale-review dismissal, review-thread
+resolution, and its existing CodeQL/security/quality rules without bypass actors.
+The evaluated Factory gate raises the count to two for sensitive changes. Ticket #9 must
 complete protection drift, fork verification, trusted evaluator/workflow bootstrap,
 and the merge-time authorization boundary. This workflow currently runs the
 candidate evaluator under read-only permissions; loading policy from base does

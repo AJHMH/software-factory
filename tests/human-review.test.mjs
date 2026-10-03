@@ -16,7 +16,7 @@ function fixture(t,agents=[]) {
   const commit=()=>{git('add','.');git('-c','commit.gpgsign=false','-c','user.name=Test','-c','user.email=test@example.invalid','commit','-m','fixture');return git('rev-parse','HEAD');};
   write('policies/human-review.yaml',readFileSync(join(root,'policies/human-review.yaml'),'utf8').replace('agent_accounts: ["github-actions[bot]", "dependabot[bot]"]',`agent_accounts: ${JSON.stringify(agents)}`));
   for(const name of ['quality','enforcement']) write(`policies/${name}.yaml`,readFileSync(join(root,`policies/${name}.yaml`),'utf8'));
-  write('factory-contract.yaml',{version:'1.0',contract:{workload_id:'reviews',profile:'node-24',working_directory:'workload',commands:Object.fromEntries(['install','validate','test','build'].map(name=>[name,{run:'exit 0',timeout_seconds:10}]))}}); write('workload/src/index.mjs','export const value=1;\n');write('README.md','base\n');git('init');const base=commit();
+  write('factory-contract.yaml',{version:'1.0',contract:{workload_id:'reviews',profile:'node-24',working_directory:'workload',commands:Object.fromEntries(['install','validate','test','build'].map(name=>[name,{run:'exit 0',timeout_seconds:10}]))}}); write('workload/src/index.mjs','export const value=1;\n');write('src/auth/token.mjs','export const authenticated=true;\n');write('README.md','base\n');git('init');const base=commit();
   write('README.md','candidate\n');let revision=commit();
   const evidence={version:'1.0',repository:'owner/repo',pull_request:1,revision,base_revision:base,author:'author',reviews:[{id:1,login:'reviewer',type:'User',state:'APPROVED',commit_id:revision,submitted_at:'2026-10-01T00:00:00Z',permission:'write'}]};
   const run=(extra=[])=>{write('reviews.json',evidence);const result=spawnSync(process.execPath,[cli,'human-review','--trusted-revision',base,'--base-revision',base,'--contract',join(repo,'factory-contract.yaml'),'--repository','owner/repo','--pull-request','1','--evidence',join(repo,'reviews.json'),...extra],{cwd:root,encoding:'utf8',env:{...process.env,GITHUB_STEP_SUMMARY:''}});return {...result,report:result.stdout ? JSON.parse(result.stdout) : null};};
@@ -29,11 +29,16 @@ test('ordinary changes require one current independent human approval',t=>{
   f.evidence.reviews=[];assert.equal(f.run().status,1);
 });
 
-test('sensitive paths, removals and moves require two distinct approvals under base policy',t=>{
+test('candidate policy cannot weaken the two-distinct-reviewer requirement for sensitive paths',t=>{
   const f=fixture(t);f.change('policies/human-review.yaml',readFileSync(join(root,'policies/human-review.yaml'),'utf8').replace('critical_paths: 2','critical_paths: 1'));
   const denied=f.run();assert.equal(denied.status,1);assert.equal(denied.report.requiredApprovals,2);
   f.evidence.reviews.push({...f.evidence.reviews[0],id:2});assert.equal(f.run().status,1,'one reviewer cannot count twice');
   f.evidence.reviews[1].login='second-reviewer';assert.equal(f.run().status,0);
+});
+
+test('moving a file out of an authentication directory preserves its sensitive-path requirement',t=>{
+  const f=fixture(t);f.git('mv','src/auth/token.mjs','auth-moved.mjs');f.change('README.md','renamed authentication code\n');
+  const result=f.run();assert.equal(result.status,1);assert.equal(result.report.requiredApprovals,2);assert.ok(result.report.criticalPaths.includes('src/auth/token.mjs'));
 });
 
 test('stale, dismissed, bot, author and read-only approvals never authorize a head',t=>{
