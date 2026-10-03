@@ -1,0 +1,6 @@
+version: "1.0"
+profiles:
+  - id: node-24
+    language: javascript-typescript
+    build_mode: none
+    category: /language:javascript-typescript

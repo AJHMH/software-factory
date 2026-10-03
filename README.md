@@ -10,7 +10,8 @@ Scoped execution-policy evaluation is available through the public CLI, with
 trusted policy revisions and approved exceptions. The Node 24 profile now enforces
 revision-bound global and changed-code coverage through the CLI and CI.
 Pinned secret/dependency scans enforce revision-bound findings against trusted policy.
-Hosted human review, SAST policy evaluation, and release
+Native CodeQL findings are evaluated against trusted severity policy.
+Hosted human review and release
 certification remain **unsupported**. Release certification deliberately fails until
 their implementations and evidence checks exist. Dependency merging, agent writes,
 release publication, deployment, health alerts, and rollback are disabled.
@@ -23,6 +24,8 @@ See [coverage enforcement](docs/coverage-enforcement.md) for measurement, baseli
 thresholds, and approved exceptions.
 See [security enforcement](docs/security-enforcement.md) for pinned scanners,
 redacted evidence, severity thresholds, and scoped dummy approvals.
+See [CodeQL enforcement](docs/sast-enforcement.md) for native analysis identity,
+severity rules, error handling, and required checks.
 Policies and agent personas describe target behavior; they do not enable automation
 or establish compliance. Passing template tests is not evidence of a clean workload.
 

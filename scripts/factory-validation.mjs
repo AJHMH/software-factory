@@ -34,7 +34,8 @@ const capabilities = {
     requiredForRelease: true,
   },
   'sast-policy': {
-    reason: 'CodeQL findings are not enforced against configured severity thresholds.',
+    reason: 'Native CodeQL severity evaluation is available via sast and collect-sast; this report supplies no evaluated analysis evidence.',
+    available: true,
     trackingIssue: 7,
     requiredForRelease: true,
   },
@@ -77,6 +78,7 @@ function publish(report) {
       `## Factory ${report.operation}: ${report.outcome}`,
       '',
       report.operation === 'validate' ? 'These command results do not authorize a release or establish policy/security compliance.' :
+        report.operation === 'sast' ? 'CodeQL policy evidence applies only to the named revision; it does not authorize a release.' :
         report.operation === 'security' ? 'Redacted scanner evidence applies only to the named revision; it does not authorize a release.' :
         report.operation === 'coverage' ? 'Coverage and test evidence applies only to the named source revisions; it does not authorize a merge or release.' :
         report.operation === 'policy' ? 'Execution-policy evaluation only: no workload commands executed, hosted human approval verified, or release authorized.' :
@@ -91,15 +93,15 @@ function publish(report) {
   console.log(JSON.stringify({ schemaVersion: 1, ...report }));
 }
 
-if (['policy', 'coverage', 'measure-coverage', 'security', 'scan-security'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
-  args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', ...(command === 'security' ? ['--evidence'] : command === 'scan-security' ? ['--tools-dir', '--output'] : ['--overrides', ...(command === 'coverage' ? ['--evidence', '--base-revision'] : command === 'measure-coverage' ? ['--base-revision', '--output'] : [])])].includes(arg)) &&
+if (['policy', 'coverage', 'measure-coverage', 'security', 'scan-security', 'sast', 'collect-sast'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
+  args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', ...(['security','sast'].includes(command) ? ['--evidence'] : command === 'collect-sast' ? ['--repository','--ref','--output'] : command === 'scan-security' ? ['--tools-dir', '--output'] : ['--overrides', ...(command === 'coverage' ? ['--evidence', '--base-revision'] : command === 'measure-coverage' ? ['--base-revision', '--output'] : [])])].includes(arg)) &&
   new Set(args.filter((_, index) => index % 2 === 1)).size === (args.length - 1) / 2) {
   const { evaluatePolicy } = await import('./policy-evaluation.mjs');
   const options = Object.fromEntries(args.slice(1).reduce((entries, value, index, array) => {
     if (index % 2 === 0) entries.push([value, array[index + 1]]);
     return entries;
   }, /** @type {string[][]} */ ([])));
-  const report = command === 'scan-security' ? await (await import('./security-collection.mjs')).collectSecurity(options) : command === 'security' ? (await import('./security-evaluation.mjs')).evaluateSecurity(options) : command === 'measure-coverage' ? await (await import('./coverage-collection.mjs')).collectCoverage(options) : command === 'coverage' ? (await import('./coverage-evaluation.mjs')).evaluateCoverage(options) : evaluatePolicy(options);
+  const report = command === 'collect-sast' ? await (await import('./sast-collection.mjs')).collectSast(options) : command === 'sast' ? (await import('./sast-evaluation.mjs')).evaluateSast(options) : command === 'scan-security' ? await (await import('./security-collection.mjs')).collectSecurity(options) : command === 'security' ? (await import('./security-evaluation.mjs')).evaluateSecurity(options) : command === 'measure-coverage' ? await (await import('./coverage-collection.mjs')).collectCoverage(options) : command === 'coverage' ? (await import('./coverage-evaluation.mjs')).evaluateCoverage(options) : evaluatePolicy(options);
   publish(report);
   process.exitCode = report.outcome === 'passed' ? 0 : 1;
 } else if ((command === 'validate' || command === 'profile') &&
@@ -130,6 +132,6 @@ if (['policy', 'coverage', 'measure-coverage', 'security', 'scan-security'].incl
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }

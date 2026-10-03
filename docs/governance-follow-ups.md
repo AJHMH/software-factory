@@ -12,7 +12,8 @@ Restore enforcement only after these tracked requirements are demonstrated:
   dummy approvals, severity thresholds, and mandatory evaluated security CI.
   Safe denial fixtures execute in CI. GitHub-native protections remain enabled.
   See [security enforcement](security-enforcement.md) for scope and limits.
-- #7: Enforce CodeQL finding severity and bind results to the current revision.
+- #7 implements native exact-revision CodeQL severity evaluation and the required
+  Factory SAST check. Hosted clean/prohibited-result evidence is recorded on the ticket.
 - #8: Verify independent human approvals for sensitive changes and exceptions.
   Replace the review status report with actual revision-bound review evaluation.
 - #9: Configure and verify required checks/rulesets, including the trusted-policy

@@ -3,8 +3,9 @@
 ## Implementation status
 Secret/dependency gates run pinned Gitleaks and OSV scans against committed source
 and trusted policy. See [security enforcement](security-enforcement.md) for scope,
-redaction, dummy approvals, and limits. SAST evaluation and certification remain
-unsupported. Other controls below describe target requirements.
+redaction, dummy approvals, and limits. Native CodeQL severity evaluation is available;
+see [SAST enforcement](sast-enforcement.md). Certification remains unsupported.
+Other controls below describe target requirements.
 
 ## Selected review sources
 Use GitHub's native Security features for current code-quality and security review:
@@ -21,7 +22,7 @@ approvals, or a complete quality gate on their own.
 
 Missing, disabled, inaccessible, or stale scanning results must not count as clean
 checks. Local pinned scanners now supply secret/dependency evidence. Hosted CodeQL
-evaluation and authenticated release evidence remain #7 and #14.
+severity evaluation now supplements native checks; authenticated release evidence remains #14.
 
 On October 3, 2026, read-only checks verified Code Security, Dependabot security
 updates, and all exposed secret-scanning settings enabled. CodeQL and GitHub code
