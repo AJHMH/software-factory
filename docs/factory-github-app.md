@@ -20,8 +20,9 @@ App ID `5180250`, slug `ajhmh-software-factory`, bot `ajhmh-software-factory[bot
 Homepage: `https://github.com/AJHMH/software-factory`.
 Disable webhooks and user OAuth authorization; this App is an API identity.
 Limit installation to this account and select only `software-factory`.
-Registration is complete; key generation, installation, and live authentication
-are pending until verified. An App registration alone grants no working access.
+Registration, key generation, and installation are complete. Installation ID
+`167664341` is limited to `AJHMH/software-factory`. Live installation authentication
+was verified on 2026-10-03 with Contents read and Pull requests write permissions.
 
 For the initial proposal identity, grant repository **Contents: read** and
 **Pull requests: read and write**. Metadata read is implicit. No organization,
