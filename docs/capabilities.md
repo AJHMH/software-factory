@@ -22,6 +22,8 @@ The public interface is `node scripts/factory-validation.mjs`:
   coverage adapter and enforces trusted Quality policy on committed source snapshots.
 - `coverage --evidence <file> --base-revision <SHA> --trusted-revision <SHA>` evaluates
   revision-bound coverage evidence without executing tests.
+- `scan-security --trusted-revision <SHA>` scans committed source with pinned scanners.
+- `security --trusted-revision <SHA> --evidence <file>` evaluates redacted security evidence.
 - `certify` reports all mandatory release capabilities and always exits 1 with a
   `blocked` outcome. There is no publication or deployment step.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
@@ -38,8 +40,8 @@ summary. A successful reporting job is never a passing workload check.
 | contract-validation | available; evidence requires execution | yes | #3 implemented; release evidence integration follows |
 | policy-review | available for execution limits; hosted human review unavailable | yes | #4 implemented locally; #8: Human approval |
 | coverage | available; actual measurement/evaluation required | yes | #5 implemented; #9/#14: hosted protections and certification |
-| secret-scanning | unsupported | yes | #6: Real security scans |
-| dependency-scanning | unsupported | yes | #6: Dependency findings |
+| secret-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
+| dependency-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
 | sast-policy | unsupported | yes | #7: CodeQL severity enforcement |
 | release-certification | unsupported | yes | #14: Exact-revision certification |
 | agent-remediation | unsupported; writes disabled | no | #10/#11: Bounded, authorized remediation |
@@ -62,7 +64,8 @@ pushes code, creates fix PRs or incident issues, dispatches remediation, publish
 packages/releases, deploys, or rolls back workloads.
 
 CI installs Factory tools, selects the supported runtime from the validated
-contract, and executes the reference workload. Security and Agent Review report unavailable integration status. Release
+contract, and executes the reference workload. Security runs pinned scanners;
+Agent Review reports unavailable integration status. Release
 Certification remains blocked and intentionally fails. A separate CI job runs template tests and
 typechecking; its success must not replace workload-required checks in repository
 protections. Dependency and Health schedules only report unsupported status; they
@@ -73,8 +76,8 @@ The new Trusted Policy workflow reads evaluator and policy from the base revisio
 with candidate files used as data only. It requires governance-approved bootstrap
 before it can operate in GitHub; its green result is execution-policy evidence only.
 
-GitHub-native CodeQL and code quality checks are enabled. Factory evaluation of
-security findings remains unimplemented; status-report jobs do not perform scans.
+GitHub-native CodeQL and code quality checks are enabled. Factory secret/dependency
+scans supplement GitHub signals with explicit tool-version and revision evidence.
 GitHub's security policy, Dependabot alerts, code scanning alerts, and secret
 scanning alerts are the selected review sources; CodeRabbit is not required.
 See [security review sources and hosted status](security.md). Selecting GitHub
@@ -101,6 +104,6 @@ jobs as capabilities are implemented.
 
 ## Interim PR integration reporting
 
-Incomplete Factory security and review jobs report unavailable status without
-failing PRs. GitHub-native protections remain active; release certification remains
+Factory security jobs run evaluated gates. Incomplete review jobs report unavailable
+status without failing PRs. GitHub-native protections remain active; release certification remains
 blocked. See [the restoration plan](governance-follow-ups.md) for tracked follow-up tickets.

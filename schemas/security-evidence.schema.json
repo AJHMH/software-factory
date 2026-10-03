@@ -1,0 +1,27 @@
+{
+  "$schema":"http://json-schema.org/draft-07/schema#","type":"object","additionalProperties":false,
+  "required":["version","revision","tree_digest","workload_id","profile","contract_digest","tools","secrets","dependencies"],
+  "properties":{
+    "version":{"const":"1.0"},"revision":{"$ref":"#/definitions/sha"},"tree_digest":{"$ref":"#/definitions/sha"},
+    "workload_id":{"type":"string","minLength":1},"profile":{"const":"node-24"},"contract_digest":{"$ref":"#/definitions/digest"},
+    "tools":{"type":"object","additionalProperties":false,"required":["gitleaks","osv"],"properties":{"gitleaks":{"const":"8.30.1"},"osv":{"const":"2.6.0"}}},
+    "secrets":{"$ref":"#/definitions/secrets"},"dependencies":{"$ref":"#/definitions/dependencies"}
+  },
+  "definitions":{
+    "sha":{"type":"string","pattern":"^[a-f0-9]{40}$"},"digest":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "path":{"type":"string","minLength":1,"maxLength":1000},
+    "status":{"enum":["clean","findings","error","unsupported"]},"exit":{"type":["integer","null"],"minimum":0},
+    "secrets":{"type":"object","additionalProperties":false,"required":["status","exit_code","findings"],"properties":{
+      "status":{"$ref":"#/definitions/status"},"exit_code":{"$ref":"#/definitions/exit"},
+      "findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["path","rule","line","source_digest"],"properties":{
+        "path":{"$ref":"#/definitions/path"},"rule":{"type":"string","minLength":1,"maxLength":200},"line":{"type":"integer","minimum":1},"source_digest":{"$ref":"#/definitions/digest"}
+      }}}
+    }},
+    "dependencies":{"type":"object","additionalProperties":false,"required":["status","exit_code","findings"],"properties":{
+      "status":{"$ref":"#/definitions/status"},"exit_code":{"$ref":"#/definitions/exit"},
+      "findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["package","severity","advisory"],"properties":{
+        "package":{"type":"string","minLength":1,"maxLength":200},"severity":{"enum":["info","low","medium","high","critical"]},"advisory":{"type":"string","pattern":"^[A-Za-z0-9-]+$","maxLength":200}
+      }}}
+    }}
+  }
+}

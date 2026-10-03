@@ -11,7 +11,7 @@ import { parse } from 'yaml';
 /** @typedef {{id: string, rule: string, value: number | boolean, workload_id: string, profile: string, revision: string, contract_digest: string, reason: string, owner: string, approver: string, expires_at: string, evidence_id: string}} Exception */
 
 const ajv = new Ajv.default({ strict: true, allErrors: true });
-const validators = Object.fromEntries(['factory-policy', 'workload-profiles', 'policy-overrides', 'factory-contract', 'quality-policy', 'coverage-evidence'].map(name =>
+const validators = Object.fromEntries(['factory-policy', 'workload-profiles', 'policy-overrides', 'factory-contract', 'quality-policy', 'coverage-evidence', 'security-evidence'].map(name =>
   [name, ajv.compile(JSON.parse(readFileSync(new URL(`../schemas/${name}.schema.json`, import.meta.url), 'utf8')))]));
 /** @param {string} source */
 export function digest(source) { return createHash('sha256').update(source).digest('hex'); }

@@ -9,7 +9,8 @@ Contract validation and the Node 24 reference workload execute locally and in CI
 Scoped execution-policy evaluation is available through the public CLI, with
 trusted policy revisions and approved exceptions. The Node 24 profile now enforces
 revision-bound global and changed-code coverage through the CLI and CI.
-Hosted human review, Factory security gates, and release
+Pinned secret/dependency scans enforce revision-bound findings against trusted policy.
+Hosted human review, SAST policy evaluation, and release
 certification remain **unsupported**. Release certification deliberately fails until
 their implementations and evidence checks exist. Dependency merging, agent writes,
 release publication, deployment, health alerts, and rollback are disabled.
@@ -20,6 +21,8 @@ See [trusted policy evaluation](docs/policy-evaluation.md) for precedence,
 exception approvals, and the trusted GitHub workflow bootstrap.
 See [coverage enforcement](docs/coverage-enforcement.md) for measurement, baselines,
 thresholds, and approved exceptions.
+See [security enforcement](docs/security-enforcement.md) for pinned scanners,
+redacted evidence, severity thresholds, and scoped dummy approvals.
 Policies and agent personas describe target behavior; they do not enable automation
 or establish compliance. Passing template tests is not evidence of a clean workload.
 
@@ -71,6 +74,6 @@ revision-bound certification remain separate implementation tickets.
 
 ## Interim PR integration reporting
 
-Incomplete Factory security and review jobs report unavailable status without
-failing PRs. GitHub-native protections remain active; release certification remains
+Factory security jobs run evaluated gates. Incomplete review jobs report unavailable
+status without failing PRs. GitHub-native protections remain active; release certification remains
 blocked. See [the restoration plan](docs/governance-follow-ups.md) for tracked follow-up tickets.

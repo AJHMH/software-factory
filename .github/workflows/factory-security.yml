@@ -14,19 +14,25 @@ permissions:
 
 jobs:
   security-plane:
-    name: Report Factory security integration status
+    name: Enforce Factory secret and dependency policy
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Factory tooling
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Report Factory capability inventory
-        run: node scripts/factory-validation.mjs inventory
-      - name: Report capability outcome
-        run: node scripts/factory-validation.mjs capability secret-scanning
+      - name: Install Factory dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Install checksum-verified pinned scanners
+        run: node scripts/install-security-tools.mjs
+      - name: Scan committed source and enforce trusted security policy
+        env:
+          TRUSTED_POLICY_REVISION: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: node scripts/factory-validation.mjs scan-security --trusted-revision "$TRUSTED_POLICY_REVISION" --output tmp/security-evidence.json

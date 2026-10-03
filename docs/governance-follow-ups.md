@@ -8,9 +8,10 @@ Release certification continues to reject missing mandatory evidence.
 
 Restore enforcement only after these tracked requirements are demonstrated:
 
-- #6: Evaluate real secret/dependency findings, scanner availability and errors,
-  and exact-revision evidence against trusted security policy. Then replace the
-  security status report with a mandatory evaluated gate, with denial tests.
+- #6 implements pinned Gitleaks/OSV scans, exact-revision redacted findings, scoped
+  dummy approvals, severity thresholds, and mandatory evaluated security CI.
+  Safe denial fixtures execute in CI. GitHub-native protections remain enabled.
+  See [security enforcement](security-enforcement.md) for scope and limits.
 - #7: Enforce CodeQL finding severity and bind results to the current revision.
 - #8: Verify independent human approvals for sensitive changes and exceptions.
   Replace the review status report with actual revision-bound review evaluation.

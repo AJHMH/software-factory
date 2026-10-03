@@ -10,7 +10,6 @@ import { parse } from 'yaml';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixtures = [
   ['factory-ci.yml', 'validation-plane', 'contract-validation', true],
-  ['factory-security.yml', 'security-plane', 'secret-scanning', false],
   ['factory-agent-review.yml', 'code-quality-and-policy-review', 'policy-review', false],
   ['factory-release.yml', 'release-plane', 'release-certification', true],
   ['factory-dependencies.yml', 'evaluate-dependencies', 'dependency-automation', false],
@@ -31,12 +30,28 @@ test('workflow fixtures cannot approve, push, publish, or hide unsupported requi
           assert.ok(['actions/checkout@v4', 'actions/setup-node@v4'].includes(step.uses), filename);
           if (step.uses === 'actions/checkout@v4') assert.equal(step.with['persist-credentials'], false, filename);
         } else {
-          assert.ok(/^(node scripts\/factory-validation\.mjs (inventory|profile|validate|certify|capability [a-z-]+(?: --required)?)|npm (ci --ignore-scripts|run typecheck|test))$/.test(step.run.trim()), filename);
+          assert.ok(/^(node scripts\/factory-validation\.mjs (inventory|profile|validate|certify|capability [a-z-]+(?: --required)?)|node scripts\/install-security-tools\.mjs|npm (ci --ignore-scripts|run typecheck|test))$/.test(step.run.trim()), filename);
           assert.equal(step.if, undefined, filename);
         }
       }
     }
   }
+});
+
+test('security CI scans the exact head with base policy and no write credentials', () => {
+  const workflow=parse(readFileSync(join(root,'.github/workflows/factory-security.yml'),'utf8'));
+  assert.deepEqual(workflow.permissions,{contents:'read'});
+  assert.ok(!Object.hasOwn(workflow.on,'pull_request_target'));
+  const job=workflow.jobs['security-plane'];
+  assert.equal(job['continue-on-error'],undefined);
+  assert.equal(job.steps[0].with.ref,'${{ github.event.pull_request.head.sha || github.sha }}');
+  assert.equal(job.steps[0].with['fetch-depth'],0);
+  assert.equal(job.steps[0].with['persist-credentials'],false);
+  assert.equal(job.steps.at(-1).env.TRUSTED_POLICY_REVISION,'${{ github.event.pull_request.base.sha || github.event.before || github.sha }}');
+  assert.equal(job.steps.at(-1).run,'node scripts/factory-validation.mjs scan-security --trusted-revision "$TRUSTED_POLICY_REVISION" --output tmp/security-evidence.json');
+  assert.ok(job.steps.every(step=>!step.if && !step['continue-on-error'] && !step.run?.includes('${{')));
+  const ci=parse(readFileSync(join(root,'.github/workflows/factory-ci.yml'),'utf8'));
+  assert.equal(ci.jobs['factory-template-tests'].steps.at(-1).env.FACTORY_SECURITY_INTEGRATION,'1');
 });
 
 test('the trusted policy workflow never runs candidate code or uses candidate policy authority', () => {

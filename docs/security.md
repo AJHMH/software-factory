@@ -1,9 +1,10 @@
 # Security & Threat Model
 
 ## Implementation status
-The controls below are target requirements, not implemented guarantees. Security
-gates currently report unsupported and block certification; no secret, dependency,
-or SAST scan is performed by the scaffold. See [capabilities](capabilities.md).
+Secret/dependency gates run pinned Gitleaks and OSV scans against committed source
+and trusted policy. See [security enforcement](security-enforcement.md) for scope,
+redaction, dummy approvals, and limits. SAST evaluation and certification remain
+unsupported. Other controls below describe target requirements.
 
 ## Selected review sources
 Use GitHub's native Security features for current code-quality and security review:
@@ -19,14 +20,14 @@ These signals do not establish test coverage, architectural correctness, human
 approvals, or a complete quality gate on their own.
 
 Missing, disabled, inaccessible, or stale scanning results must not count as clean
-checks. Actual alert evaluation and revision-bound enforcement are implementation
-work in issues #6, #7, and #14.
+checks. Local pinned scanners now supply secret/dependency evidence. Hosted CodeQL
+evaluation and authenticated release evidence remain #7 and #14.
 
 On October 3, 2026, read-only checks verified Code Security, Dependabot security
 updates, and all exposed secret-scanning settings enabled. CodeQL and GitHub code
-quality analysis passed on PR #22. The security policy is published. Factory PR
-security/review jobs temporarily report unavailable integration status; their green
-reporting jobs are not clean scans. See [the restoration plan](governance-follow-ups.md)
+quality analysis passed on PR #22. The security policy is published. Factory security
+now executes evaluated scans; review integration remains informational.
+See [the restoration plan](governance-follow-ups.md)
 for issues #6–#9 and #14. Release certification remains blocked.
 
 ## Threat Vectors
