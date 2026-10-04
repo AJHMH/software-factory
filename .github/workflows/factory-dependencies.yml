@@ -39,7 +39,7 @@ jobs:
         env:
           TRUSTED_REVISION: ${{ github.sha }}
         run: node scripts/factory-validation.mjs dependencies --mode update --trusted-revision "$TRUSTED_REVISION" --output tmp/dependency-proposals
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dependency-proposals-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: tmp/dependency-proposals

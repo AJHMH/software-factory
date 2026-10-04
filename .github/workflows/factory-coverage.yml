@@ -36,7 +36,7 @@ jobs:
         run: node scripts/factory-validation.mjs measure-coverage --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --output coverage/evidence.json
       - name: Retain revision-bound coverage comparison for human review
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: factory-coverage-${{ github.event.pull_request.head.sha || github.sha }}
           path: coverage/evidence.json

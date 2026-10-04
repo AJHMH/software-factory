@@ -74,7 +74,7 @@ jobs:
           FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
         run: node scripts/release-workflow.mjs certify --source-revision "$SOURCE_REVISION" --producer-run "$PRODUCER_RUN_ID" --pull-request "$PULL_REQUEST_NUMBER"
       - name: Retain source-bound release certificate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: factory-release-certificate-${{ inputs.source_revision }}-${{ github.run_id }}
           path: tmp/release-certificate/release-certificate.json

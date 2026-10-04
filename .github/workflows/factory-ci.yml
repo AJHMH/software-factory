@@ -41,7 +41,7 @@ jobs:
           TRUSTED_REVISION: ${{ github.sha }}
         run: node scripts/factory-validation.mjs release-artifact --mode produce --trusted-revision "$TRUSTED_REVISION" --validation-evidence tmp/factory-validation.json --output-dir tmp/release-artifact
       - name: Retain immutable source-bound workload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: factory-reference-workload-${{ github.sha }}-${{ github.run_id }}
           path: tmp/release-artifact
