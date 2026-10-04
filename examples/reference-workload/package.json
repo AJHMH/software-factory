@@ -12,7 +12,7 @@
   },
   "engines": { "node": "24.x" },
   "devDependencies": {
-    "@types/node": "24.19.1",
+    "@types/node": "26.6.3",
     "typescript": "7.0.2"
   }
 }
