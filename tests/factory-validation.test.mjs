@@ -34,14 +34,14 @@ test('release certification is blocked by every unsupported mandatory capability
   assert.ok(report.results.every((gate) => gate.status !== 'passed'));
 });
 
-test('disabled optional automation reports unsupported without authorizing any action', () => {
+test('dependency capability metadata does not authorize any action', () => {
   const result = run('capability', 'dependency-automation');
   assert.equal(result.status, 0);
   const report = JSON.parse(result.stdout);
-  assert.equal(report.outcome, 'unsupported');
-  assert.equal(report.results[0].status, 'unsupported');
+  assert.equal(report.outcome, 'not-run');
+  assert.equal(report.results[0].status, 'not-run');
   assert.equal(report.results[0].required, false);
-  assert.match(report.results[0].reason, /disabled/i);
+  assert.match(report.results[0].reason, /no update, approval, or merge evidence/i);
 });
 
 test('operators can inventory every capability without implying any gate passed', () => {
