@@ -50,7 +50,7 @@ export async function localRemediate(options) {
  } catch {return {operation:'local-remediation',outcome:'blocked',results:[{capability:'agent-remediation',required:true,status:'error',reason}]};}
  finally {
   if(installationToken) {try {await fetch('https://api.github.com/installation/token',{method:'DELETE',headers:{Authorization:'Bearer '+installationToken,Accept:'application/vnd.github+json'},redirect:'error',signal:AbortSignal.timeout(15000)});}catch { /* Token expires in one hour if revocation is unavailable. */ }}
-  installationToken='';for(const name of names) {if(prior[name]===undefined) delete process.env[name];else process.env[name]=prior[name];}
+  for(const name of names) {if(prior[name]===undefined) delete process.env[name];else process.env[name]=prior[name];}
   if(temporary) rmSync(temporary,{recursive:true,force:true});
  }
 }
