@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-// Execution and scoped policy evaluation are available; hosted authorization and release evidence follow later.
+// Factory validation, hosted authorization, releases, and controlled reference promotion share this public interface.
 /** @type {Record<string, { reason: string, trackingIssue: number, requiredForRelease: boolean, available?: boolean }>} */
 const capabilities = {
   'bounded-agent-proposal': {
@@ -70,6 +70,12 @@ const capabilities = {
     requiredForRelease: true,
     available: true,
   },
+  'artifact-promotion': {
+    reason: 'Certified release assets can be verified and promoted through the protected reference environment; this report contains no executed deployment receipt.',
+    trackingIssue: 16,
+    requiredForRelease: false,
+    available: true,
+  },
   'agent-remediation': {
     reason: 'Authorized bounded JSON formatting is available via remediate and local-remediate; local publication requires operator approval of the exact proposal digest. This report supplies no executed request evidence.',
     available: true,
@@ -88,9 +94,10 @@ const capabilities = {
     requiredForRelease: false,
   },
   'release-publication': {
-    reason: 'Versioning, release publication, and deployment are disabled pending verified certification.',
+    reason: 'Versioned signed release publication is available via release; controlled reference deployment is available via promote. This report supplies no executed release or deployment evidence.',
     trackingIssue: 15,
     requiredForRelease: false,
+    available: true,
   },
 };
 
@@ -117,6 +124,17 @@ if (command === 'release' && args.length >= 17 && args.length % 2 === 1 && args.
   const report=(await import('./release-management.mjs')).prepareRelease(options);publish(report);process.exit(report.outcome==='prepared'?0:1);
 }
 
+if (command === 'promote' && args.length >= 5 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--mode','--repository','--actor','--trusted-repo','--trusted-revision','--environment','--release-manifest','--certificate','--artifact-directory','--approval-evidence','--state-directory','--previous-stable','--output'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2 && args[args.indexOf('--mode')+1] === 'apply') {
+  const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
+  const report=(await import('./artifact-promotion.mjs')).promoteArtifact(options);
+  if(options['--output']) {
+    const output=resolve(options['--output']);mkdirSync(dirname(output),{recursive:true});
+    if(existsSync(output)){const prior=lstatSync(output);if(!prior.isFile()||prior.isSymbolicLink()||prior.nlink!==1)throw new Error('Promotion report output must be a regular file.');}
+    writeFileSync(output,JSON.stringify(report,null,2)+'\n',{flag:existsSync(output)?'w':'wx',mode:0o600});
+  }
+  publish(report);process.exit(report.outcome==='promoted'?0:1);
+}
+
 /** @param {{ operation: string, outcome: string, results: Array<{ capability: string, status: string, required: boolean, reason: string, trackingIssue?: number }> }} report */
 function publish(report) {
   if (process.env.GITHUB_STEP_SUMMARY) {
@@ -133,6 +151,7 @@ function publish(report) {
       report.operation === 'policy' ? 'Execution-policy evaluation only: no workload commands executed, hosted human approval verified, or release authorized.' :
       report.operation === 'certify' ? 'Release certification evaluates exact-revision evidence and live GitHub controls; it does not publish a release or deploy.' :
       report.operation === 'release' ? 'Release preparation verifies exact-revision certification and artifact digests; it does not publish. The trusted GitHub release workflow signs and publishes.' :
+      report.operation === 'promote' ? 'Promotion consumes an already-signed, certified release without rebuilding. GitHub Environment protection gates hosted execution.' :
         'This is a capability report, not evidence of a clean workload check or permission to act.',
       '',
       '| Capability | Status | Required for this request | Reason / tracking issue |',
@@ -200,6 +219,6 @@ if (command === 'local-remediate' && args.length >= 3 && args.length % 2 === 1 &
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs release --mode prepare --repository <owner/repo> --source-revision <SHA> --actor <login> --trusted-repo <path> --certificate <json> --artifact-directory <dir> --output-directory <new-dir> [--certificate-run <id> --certificate-run-metadata <json> --producer-run <id> --producer-run-metadata <json>] | local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> | governance --repository <owner/repo> --trusted-revision <SHA> --evidence <file> | collect-governance --repository <owner/repo> --trusted-revision <SHA> | bootstrap-governance --repository <owner/repo> --trusted-revision <SHA> --apply true | human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | release-artifact --mode <produce|verify> --trusted-revision <SHA> (--validation-evidence <file> --output-dir <dir> | --artifact-directory <dir>) | certify --repository <owner/repo> --pull-request <number> --trusted-revision <SHA> --evidence <bundle.json> --artifact-directory <dir> [--output <certificate.json>] | inventory | capability <name> [--required] | certify | validate [--contract <path>] [--evidence-output <file>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs promote --mode apply --repository <owner/repo> --actor <login> --trusted-repo <path> --trusted-revision <SHA> --environment <name> --release-manifest <manifest.json> --certificate <certificate.json> --artifact-directory <assets-dir> --approval-evidence <github-environment-evidence.json> --state-directory <external-dir> [--previous-stable <deployment.json>] [--output <receipt.json>] | release --mode prepare --repository <owner/repo> --source-revision <SHA> --actor <login> --trusted-repo <path> --certificate <json> --artifact-directory <dir> --output-directory <new-dir> [--certificate-run <id> --certificate-run-metadata <json> --producer-run <id> --producer-run-metadata <json>] | local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> --scope-id <id> | inventory | capability <name> [--required] | certify | validate [--contract <path>] [--evidence-output <file>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }

@@ -1,0 +1,26 @@
+version: 1.0
+deployment:
+  adapter: filesystem-reference-v1
+  approval_provider: github-environment-protection
+  workflow: .github/workflows/factory-promote-reference.yml
+  environments:
+    reference:
+      enabled: true
+      approval_required: true
+      concurrency_group: factory-promote-reference
+      health:
+        required_assets:
+          - reference-workload.mjs
+          - sbom.spdx.json
+          - release-certificate.json
+          - release-manifest.json
+        verify_artifact_digest: true
+        verify_sbom_digest: true
+        verify_certificate_binding: true
+      migration:
+        allowed_strategies: [none]
+      github_token_permissions:
+        contents: read
+        actions: read
+        deployments: write
+      external_secrets: []
