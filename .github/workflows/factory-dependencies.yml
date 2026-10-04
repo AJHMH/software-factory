@@ -4,27 +4,78 @@ on:
   schedule:
     - cron: '0 2 * * 1'
   workflow_dispatch:
-  pull_request:
-    branches: [main]
+    inputs:
+      pull_request:
+        description: 'Optional Dependabot PR number; empty inspects all open proposals'
+        required: false
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: factory-dependency-maintenance
+  cancel-in-progress: false
+
 jobs:
-  evaluate-dependencies:
-    name: Report Disabled Dependency Automation
+  update:
+    name: Resolve npm update proposals
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Factory tooling
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Report Factory capability inventory
-        run: node scripts/factory-validation.mjs inventory
-      - name: Report capability outcome
-        run: node scripts/factory-validation.mjs capability dependency-automation
+      - run: npm ci --ignore-scripts
+      - name: Resolve updates using committed manifests and public npm metadata
+        env:
+          TRUSTED_REVISION: ${{ github.sha }}
+        run: node scripts/factory-validation.mjs dependencies --mode update --trusted-revision "$TRUSTED_REVISION" --output tmp/dependency-proposals
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependency-proposals-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tmp/dependency-proposals
+          if-no-files-found: error
+          retention-days: 7
+
+  merge:
+    name: Merge eligible Dependabot proposals
+    needs: update
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      statuses: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - name: Inspect current proposals and request SHA-constrained squash merges
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRUSTED_REVISION: ${{ github.sha }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
+        run: |
+          if [ -n "$PULL_REQUEST" ]; then
+            node scripts/factory-validation.mjs dependencies --mode merge --trusted-revision "$TRUSTED_REVISION" --repository "$REPOSITORY" --pull-request "$PULL_REQUEST"
+          else
+            node scripts/factory-validation.mjs dependencies --mode merge --trusted-revision "$TRUSTED_REVISION" --repository "$REPOSITORY"
+          fi

@@ -11,7 +11,6 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const fixtures = [
   ['factory-ci.yml', 'validation-plane', 'contract-validation', true],
   ['factory-release.yml', 'release-plane', 'release-certification', true],
-  ['factory-dependencies.yml', 'evaluate-dependencies', 'dependency-automation', false],
   ['factory-health.yml', 'evaluate-health', 'health-monitoring', false],
 ];
 
@@ -50,6 +49,21 @@ test('security CI scans the exact head with base policy and no write credentials
   assert.ok(job.steps.every(step=>!step.if && !step['continue-on-error'] && !step.run?.includes('${{')));
   const ci=parse(readFileSync(join(root,'.github/workflows/factory-ci.yml'),'utf8'));
   assert.equal(ci.jobs['factory-template-tests'].steps.at(-1).env.FACTORY_SECURITY_INTEGRATION,'1');
+});
+
+test('dependency maintenance runs on schedule or manual dispatch and requests merges only with hosted permissions',()=>{
+  const workflow=parse(readFileSync(join(root,'.github/workflows/factory-dependencies.yml'),'utf8'));
+  assert.deepEqual(Object.keys(workflow.on),['schedule','workflow_dispatch']);
+  assert.equal(workflow.on.schedule.length,1);
+  assert.equal(workflow.jobs.update.if,"github.ref == 'refs/heads/main'");
+  assert.equal(workflow.jobs.update.steps.some(step=>step.run?.includes('dependencies --mode update')),true);
+  const merge=workflow.jobs.merge;
+  assert.equal(merge.needs,'update');
+  assert.equal(merge.if,"github.ref == 'refs/heads/main'");
+  assert.deepEqual(merge.permissions,{contents:'write','pull-requests':'write',checks:'read',statuses:'read'});
+  assert.equal(merge.steps.some(step=>step.run?.includes('dependencies --mode merge')),true);
+  assert.ok(merge.steps.every(step=>step.uses!=='actions/checkout@v4'||step.with['persist-credentials']===false));
+  assert.ok(!JSON.stringify(workflow).includes('pull_request_target'));
 });
 
 test('SAST CI evaluates exact-head native analyses with read-only security permissions',()=>{

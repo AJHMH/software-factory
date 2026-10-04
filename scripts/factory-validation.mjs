@@ -69,7 +69,8 @@ const capabilities = {
     requiredForRelease: false,
   },
   'dependency-automation': {
-    reason: 'Dependency updates, automatic approvals, and merges are disabled until policy gates exist.',
+    reason: 'npm update proposals and exact-head Dependabot merge evaluation are available via dependencies; this report supplies no update, approval, or merge evidence.',
+    available: true,
     trackingIssue: 12,
     requiredForRelease: false,
   },
@@ -87,6 +88,11 @@ const capabilities = {
 
 const args = process.argv.slice(2);
 const [command, capability, requiredFlag] = args;
+
+if (command === 'dependencies' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--mode','--trusted-repo','--trusted-revision','--repository','--pull-request','--output'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
+ const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
+ const report=options['--mode']==='update'?await (await import('./dependency-updater.mjs')).updateDependencies(options):await (await import('./dependency-maintenance.mjs')).maintainDependencies(options);publish(report);process.exit(report.outcome==='passed'?0:1);
+}
 
 /** @param {{ operation: string, outcome: string, results: Array<{ capability: string, status: string, required: boolean, reason: string, trackingIssue?: number }> }} report */
 function publish(report) {
