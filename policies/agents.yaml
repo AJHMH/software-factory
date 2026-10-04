@@ -1,5 +1,16 @@
 version: 1.0
 agents:
+  # Trusted broker pack. Scope IDs are assigned by the operator, never proposal data.
+  runner:
+    max_retries: 3
+    max_duration_ms: 60000
+    budget_microusd: 2000000
+    cost_per_attempt_microusd: 100000
+    max_actions: 20
+    max_total_bytes: 65536
+    retention_days: 365
+    allowed_paths: ["src/", "tests/", "docs/"]
+    restricted_paths: [".github/", "policies/", "infrastructure/production/"]
   global:
     max_retries: 3
     budget_limit_usd_per_pr: 2.0
@@ -17,8 +28,8 @@ agents:
       can_commit: true
       can_merge: false
     review_agent:
-      can_approve: true
-      can_merge: true
+      can_approve: false # Only the authorized human supplies approval.
+      can_merge: false
       override_required_for: ["governance", "security"]
     remediation_agent:
       can_commit: true
