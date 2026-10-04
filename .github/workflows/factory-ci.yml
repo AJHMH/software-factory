@@ -35,7 +35,18 @@ jobs:
       - name: Report Factory capability inventory
         run: node scripts/factory-validation.mjs inventory
       - name: Execute workload contract
-        run: node scripts/factory-validation.mjs validate
+        run: node scripts/factory-validation.mjs validate --evidence-output tmp/factory-validation.json
+      - name: Package exact build with SBOM and source evidence
+        env:
+          TRUSTED_REVISION: ${{ github.sha }}
+        run: node scripts/factory-validation.mjs release-artifact --mode produce --trusted-revision "$TRUSTED_REVISION" --validation-evidence tmp/factory-validation.json --output-dir tmp/release-artifact
+      - name: Retain immutable source-bound workload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-reference-workload-${{ github.sha }}-${{ github.run_id }}
+          path: tmp/release-artifact
+          if-no-files-found: error
+          retention-days: 90
 
   factory-template-tests:
     name: Verify Factory safety controls

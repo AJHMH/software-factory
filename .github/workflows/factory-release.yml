@@ -1,28 +1,54 @@
-name: Factory Release Certification
+name: Factory Release Artifact Verification
 
 on:
-  push:
+  workflow_run:
+    workflows: [Factory Continuous Integration]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      producer_run_id:
+        description: 'GitHub Actions run ID that produced the artifact'
+        required: true
+        type: string
+      source_revision:
+        description: 'Exact 40-character source commit recorded by the artifact'
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  release-plane:
-    name: Certify Release (publication disabled)
+  verify-artifact:
+    name: Retrieve and verify exact build artifact
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.repository.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      SOURCE_REVISION: ${{ github.event.workflow_run.head_sha || inputs.source_revision }}
+      PRODUCER_RUN_ID: ${{ github.event.workflow_run.id || inputs.producer_run_id }}
     steps:
-      - name: Checkout
+      - name: Checkout trusted verifier and source history
         uses: actions/checkout@v4
         with:
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Factory tooling
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Report Factory capability inventory
-        run: node scripts/factory-validation.mjs inventory
-      - name: Report capability outcome
-        run: node scripts/factory-validation.mjs certify
+      - name: Install pinned Factory tools
+        run: npm ci --ignore-scripts
+      - name: Download recorded immutable artifact from producer run
+        uses: actions/download-artifact@v4
+        with:
+          name: factory-reference-workload-${{ env.SOURCE_REVISION }}-${{ env.PRODUCER_RUN_ID }}
+          path: tmp/downloaded-release-artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ env.PRODUCER_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Verify artifact bytes, SBOM, validation, and source metadata without rebuilding
+        run: node scripts/factory-validation.mjs release-artifact --mode verify --trusted-revision "$SOURCE_REVISION" --artifact-directory tmp/downloaded-release-artifact
