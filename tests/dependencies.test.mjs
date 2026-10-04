@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {existsSync,mkdirSync,mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import test from 'node:test';
@@ -17,7 +17,7 @@ function fixture(t) {
  git('init');git('add','.');git('-c','commit.gpgsign=false','-c','user.name=Test','-c','user.email=test@example.invalid','commit','-m','fixture');const base=git('rev-parse','HEAD'),head='b'.repeat(40);
  const state={base,head,author:'dependabot[bot]',authorType:'Bot',authorId:49699333,appId:29110,files:['package.json','package-lock.json'],before:manifest('2.9.0'),after:manifest('2.9.1'),lockBefore:lock('2.9.0'),lockAfter:lock('2.9.1'),reviews:[{id:1,user:{login:'aaron-howard',type:'User'},state:'APPROVED',commit_id:head,submitted_at:'2026-10-04T00:00:00Z'}]};
  const run=(mode='evaluate')=>{writeFileSync(join(dir,'api.json'),JSON.stringify(state));const r=spawnSync(process.execPath,['--import',pathToFileURL(join(root,'tests/fixtures/dependencies-api.mjs')).href,join(root,'scripts/factory-validation.mjs'),'dependencies','--mode',mode,'--trusted-repo',repo,'--trusted-revision',base,'--repository','org/repo','--pull-request','7'],{encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'fixture',FACTORY_TEST_API:join(dir,'api.json')}});return {...r,report:r.stdout?JSON.parse(r.stdout):null,api:JSON.parse(readFileSync(join(dir,'api.json'),'utf8'))};};
- const runUpdate=()=>{writeFileSync(join(dir,'api.json'),JSON.stringify(state));const output=join(dir,'proposals');const r=spawnSync(process.execPath,['--import',pathToFileURL(join(root,'tests/fixtures/dependencies-api.mjs')).href,join(root,'scripts/factory-validation.mjs'),'dependencies','--mode','update','--trusted-repo',repo,'--trusted-revision',base,'--output',output],{encoding:'utf8',env:{...process.env,FACTORY_TEST_API:join(dir,'api.json')}});return {...r,report:r.stdout?JSON.parse(r.stdout):null,proposal:JSON.parse(readFileSync(join(output,'proposal.json'),'utf8')),output};};
+ const runUpdate=()=>{writeFileSync(join(dir,'api.json'),JSON.stringify(state));const output=join(dir,'proposals'),proposalPath=join(output,'proposal.json');const r=spawnSync(process.execPath,['--import',pathToFileURL(join(root,'tests/fixtures/dependencies-api.mjs')).href,join(root,'scripts/factory-validation.mjs'),'dependencies','--mode','update','--trusted-repo',repo,'--trusted-revision',base,'--output',output],{encoding:'utf8',env:{...process.env,FACTORY_TEST_API:join(dir,'api.json')}});return {...r,report:r.stdout?JSON.parse(r.stdout):null,proposal:existsSync(proposalPath)?JSON.parse(readFileSync(proposalPath,'utf8')):null,output};};
  return {state,run,runUpdate,manifest,lock,dir,repo,base,head};
 }
 test('an independently approved Dependabot patch merges only its inspected SHA',t=>{
@@ -52,5 +52,5 @@ test('evaluation reports eligibility without mutating GitHub',t=>{
  const f=fixture(t),r=f.run();assert.equal(r.status,0,r.stdout);assert.equal(r.report.proposals[0].merged,false);assert.equal(r.api.merge,undefined);
 });
 test('the public updater inspects trusted manifests and emits revision-bound proposals without GitHub write credentials',t=>{
- const f=fixture(t),r=f.runUpdate();assert.equal(r.status,0,r.stdout+r.stderr);assert.equal(r.report.outcome,'passed');assert.equal(r.report.revision,f.base);assert.equal(r.proposal.revision,f.base);assert.equal(r.proposal.proposals.length,2);assert.ok(r.proposal.proposals.every(proposal=>proposal.changed===false));
+ const f=fixture(t),r=f.runUpdate();assert.equal(r.status,0,r.stdout+r.stderr);assert.equal(r.report.outcome,'passed');assert.ok(r.proposal);assert.equal(r.report.revision,f.base);assert.equal(r.proposal.revision,f.base);assert.equal(r.proposal.proposals.length,2);assert.ok(r.proposal.proposals.every(proposal=>proposal.changed===false));
 });

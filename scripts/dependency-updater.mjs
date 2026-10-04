@@ -10,8 +10,8 @@ export async function updateDependencies(options) {
  try {
   const repo=resolve(options['--trusted-repo']??'.'),sha=options['--trusted-revision'];
   if(!/^[a-f0-9]{40}$/.test(sha??'') || rawGit(repo,['cat-file','-t',sha]).trim()!=='commit' || !options['--output']) throw new Error('A trusted commit and output directory are required.');
-  const output=resolve(options['--output']),npm=join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js');
-  if(!existsSync(npm)) throw new Error('Selected Node installation must include npm.');
+  const output=resolve(options['--output']),nodeDirectory=dirname(process.execPath),npm=[join(nodeDirectory,'node_modules/npm/bin/npm-cli.js'),resolve(nodeDirectory,'..','lib/node_modules/npm/bin/npm-cli.js')].find(existsSync);
+  if(!npm) throw new Error('Selected Node installation must include npm.');
   temporary=mkdtempSync(join(tmpdir(),'factory-dependency-update-'));
   const config=join(temporary,'empty.npmrc');writeFileSync(config,'');
   const proposals=[];
