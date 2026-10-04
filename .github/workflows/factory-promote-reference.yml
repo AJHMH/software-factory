@@ -1,0 +1,160 @@
+name: Factory Promote Reference
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Certified release tag to promote (for example v1.2.3)
+        required: true
+        type: string
+      source_revision:
+        description: Exact source commit recorded in the signed release manifest
+        required: true
+        type: string
+      environment:
+        description: Protected reference environment
+        required: true
+        type: choice
+        options:
+          - reference
+
+permissions:
+  contents: read
+
+concurrency:
+  group: factory-promote-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - name: Authorize exact source and requester
+        env:
+          ACTOR: ${{ github.actor }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TRUSTED_REVISION: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: >-
+          node scripts/promotion-workflow.mjs authorize
+          --trusted-repo . --trusted-revision "$TRUSTED_REVISION"
+          --repository "$REPOSITORY" --environment "$ENVIRONMENT"
+          --actor "$ACTOR" --event "$EVENT_NAME" --ref "$REF"
+          --run-attempt "$RUN_ATTEMPT" --source-revision "$SOURCE_REVISION" --release-tag "$RELEASE_TAG"
+
+  promote:
+    needs: authorize
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - name: Confirm trusted main has not changed during approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRUSTED_REVISION: ${{ github.sha }}
+        run: |
+          CURRENT_MAIN=$(gh api "repos/$REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          test "$CURRENT_MAIN" = "$TRUSTED_REVISION"
+      - name: Download the existing certified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --dir "$RUNNER_TEMP/release-assets"
+          node -e 'const m=require(process.env.RUNNER_TEMP+"/release-assets/release-manifest.json"); if(m.tag!==process.env.RELEASE_TAG||m.sourceRevision!==process.env.SOURCE_REVISION) process.exit(1)'
+          for asset in reference-workload.mjs sbom.spdx.json release-certificate.json release-manifest.json; do
+            gh attestation verify "$RUNNER_TEMP/release-assets/$asset" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/factory-publish-release.yml" --source-ref refs/heads/main --source-digest "$SOURCE_REVISION"
+          done
+      - name: Write evidence from the protected environment gate
+        env:
+          ACTOR: ${{ github.actor }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          TRUSTED_REVISION: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: >-
+          node scripts/promotion-workflow.mjs approval
+          --trusted-repo . --trusted-revision "$TRUSTED_REVISION"
+          --repository "$REPOSITORY" --environment "$ENVIRONMENT"
+          --actor "$ACTOR" --source-revision "$SOURCE_REVISION"
+          --output "$RUNNER_TEMP/approval-evidence.json"
+      - name: Read previous stable deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: >-
+          node scripts/promotion-workflow.mjs previous
+          --trusted-repo . --trusted-revision "${{ github.sha }}"
+          --repository "$REPOSITORY" --environment "$ENVIRONMENT"
+          --output "$RUNNER_TEMP/previous-stable.json"
+      - name: Promote exact release assets and run configured health checks
+        env:
+          ACTOR: ${{ github.actor }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          TRUSTED_REVISION: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          FACTORY_STATE_DIRECTORY: ${{ runner.temp }}/factory-reference-environment
+        run: >-
+          node scripts/factory-validation.mjs promote --mode apply
+          --trusted-repo . --trusted-revision "$TRUSTED_REVISION"
+          --repository "$REPOSITORY" --environment "$ENVIRONMENT"
+          --actor "$ACTOR" --approval-evidence "$RUNNER_TEMP/approval-evidence.json"
+          --release-manifest "$RUNNER_TEMP/release-assets/release-manifest.json"
+          --certificate "$RUNNER_TEMP/release-assets/release-certificate.json"
+          --artifact-directory "$RUNNER_TEMP/release-assets"
+          --state-directory "$FACTORY_STATE_DIRECTORY"
+          --previous-stable "$RUNNER_TEMP/previous-stable.json"
+          --output "$RUNNER_TEMP/promotion-report.json"
+      - name: Persist promoted reference package
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-reference-${{ inputs.environment }}-${{ inputs.release_tag }}
+          path: ${{ runner.temp }}/factory-reference-environment/releases/${{ inputs.release_tag }}
+          if-no-files-found: error
+          retention-days: 90
+      - name: Record GitHub deployment and outcome
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: >-
+          node scripts/promotion-workflow.mjs record
+          --trusted-repo . --trusted-revision "${{ github.sha }}"
+          --repository "$REPOSITORY" --environment "$ENVIRONMENT"
+          --receipt "$RUNNER_TEMP/promotion-report.json"

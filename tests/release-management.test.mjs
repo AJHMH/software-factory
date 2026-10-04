@@ -33,6 +33,7 @@ test('the public release interface computes the next SemVer and changelog from t
  const f=fixture(t),result=invoke(f);assert.equal(result.status,0,result.stderr);assert.equal(result.report.outcome,'prepared');assert.equal(result.report.tag,'v0.1.1');
  const notes=readFileSync(join(f.output,'RELEASE_NOTES.md'),'utf8');assert.match(notes,/correct fixture behavior/);assert.doesNotMatch(notes,/internal maintenance/);
  const manifest=JSON.parse(readFileSync(join(f.output,'assets/release-manifest.json'),'utf8'));assert.equal(manifest.sourceRevision,f.revision);assert.equal(manifest.certification.artifactSha256,f.report?.artifactDigest??JSON.parse(readFileSync(f.certificatePath,'utf8')).artifact.sha256);
+ assert.deepEqual(manifest.migrationCompatibility,{strategy:'none',compatibleWithPrevious:true});
 });
 test('breaking Conventional Commits take precedence and only the authorized actor can prepare',t=>{
  const f=fixture(t);git(f.repo,'commit','--allow-empty','-m','feat(api)!: remove an interface','-m','BREAKING CHANGE: consumers must migrate');f.revision=git(f.repo,'rev-parse','HEAD');

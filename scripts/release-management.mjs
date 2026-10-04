@@ -59,7 +59,7 @@ export function prepareRelease(options){
   const output=resolve(options['--output-directory']);if(!options['--output-directory']||existsSync(output))throw new Error('Release output must be a new directory.');
   mkdirSync(output,{recursive:true});mkdirSync(join(output,'assets'));
   writeFileSync(join(output,'assets','reference-workload.mjs'),artifact,{flag:'wx'});writeFileSync(join(output,'assets','sbom.spdx.json'),sbom,{flag:'wx'});writeFileSync(join(output,'assets','release-certificate.json'),certificateBytes,{flag:'wx'});
-  const manifest={schemaVersion:1,repository,version,tag,sourceRevision:revision,certification:{sha256:sha256(certificateBytes),artifactSha256:certificate.artifact.sha256,sbomSha256:certificate.artifact.sbomSha256},createdAt:new Date().toISOString()};
+  const manifest={schemaVersion:1,repository,version,tag,sourceRevision:revision,certification:{sha256:sha256(certificateBytes),artifactSha256:certificate.artifact.sha256,sbomSha256:certificate.artifact.sbomSha256},migrationCompatibility:{strategy:'none',compatibleWithPrevious:true},createdAt:new Date().toISOString()};
   writeFileSync(join(output,'assets','release-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
   const releaseNotes=`# ${tag}\n\nSource revision: ${revision}\nArtifact SHA-256: ${certificate.artifact.sha256}\nSBOM SHA-256: ${certificate.artifact.sbomSha256}\nCertification SHA-256: ${sha256(certificateBytes)}\n\n${notes.join('\n')}\n`;
   writeFileSync(join(output,'RELEASE_NOTES.md'),releaseNotes,{flag:'wx'});

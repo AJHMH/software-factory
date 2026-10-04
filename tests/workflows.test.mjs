@@ -117,6 +117,35 @@ test('release certification and publication keep authority separated and provena
   assert.ok(!JSON.stringify(publication).includes('FACTORY_GITHUB_TOKEN'));
 });
 
+test('reference promotion is protected, serialized, exact-artifact-only, and narrowly permissioned',()=>{
+  const workflow=parse(readFileSync(join(root,'.github/workflows/factory-promote-reference.yml'),'utf8'));
+  assert.deepEqual(Object.keys(workflow.on),['workflow_dispatch']);
+  assert.deepEqual(workflow.permissions,{contents:'read'});
+  assert.deepEqual(workflow.concurrency,{'group':'factory-promote-${{ inputs.environment }}','cancel-in-progress':false});
+  assert.deepEqual(Object.keys(workflow.on.workflow_dispatch.inputs),['release_tag','source_revision','environment']);
+  const authorize=workflow.jobs.authorize,promote=workflow.jobs.promote;
+  assert.equal(authorize.if,"github.ref == 'refs/heads/main'");
+  assert.equal(promote.needs,'authorize');
+  assert.equal(promote.environment,'${{ inputs.environment }}');
+  assert.equal(promote.if,"github.ref == 'refs/heads/main'");
+  assert.deepEqual(promote.permissions,{contents:'read',actions:'read',deployments:'write'});
+  assert.deepEqual(Object.keys(promote.permissions).sort(),['actions','contents','deployments']);
+  assert.equal(authorize.steps.at(-1).run.includes('--release-tag "$RELEASE_TAG"'),true);
+  assert.ok(authorize.steps.at(-1).run.includes('promotion-workflow.mjs authorize'));
+  const download=promote.steps.find(step=>step.name==='Download the existing certified release');
+  assert.ok(download.run.includes('gh release download'));
+  assert.ok(download.run.includes('gh attestation verify'));
+  assert.ok(download.run.includes('release-manifest.json'));
+  const approval=promote.steps.find(step=>step.name==='Write evidence from the protected environment gate');
+  assert.ok(approval.run.includes('promotion-workflow.mjs approval'));
+  const promotion=promote.steps.find(step=>step.name==='Promote exact release assets and run configured health checks');
+  assert.ok(promotion.run.includes('factory-validation.mjs promote --mode apply'));
+  assert.ok(promotion.run.includes('--previous-stable'));
+  assert.ok(!JSON.stringify(workflow).includes('npm run build'));
+  assert.ok(!JSON.stringify(workflow).includes('secrets.'));
+  assert.ok(!JSON.stringify(workflow).includes('pull_request_target'));
+});
+
 test('SAST CI evaluates exact-head native analyses with read-only security permissions',()=>{
   const workflow=parse(readFileSync(join(root,'.github/workflows/factory-sast.yml'),'utf8'));
   assert.deepEqual(workflow.permissions,{contents:'read','security-events':'read'});
