@@ -13,3 +13,10 @@ See [traceable build artifacts](docs/traceable-build-artifacts.md) and [ADR 002]
 ## Controlled reference promotion
 
 The signed, certified release can be promoted without rebuilding through the GitHub `reference` Environment. The protected job verifies release attestations, copies the exact bundle through the filesystem reference adapter, records health and migration metadata, retains the package as a workflow artifact, and writes a GitHub Deployment record. See [artifact promotion](docs/artifact-promotion.md) and [ADR 003](docs/adrs/003-controlled-artifact-promotion.md).
+
+The local `rollback` operation correlates health failures with retained deployment
+evidence, restores a compatible previous reference package without rebuilding, and
+verifies its bytes. It records one attempt per deployment and escalates unsafe or
+unsupported recovery. Reference package restoration does not establish running
+service recovery. See the [rollback runbook](docs/runbooks/deployment-rollback.md)
+and [ADR 004](docs/adrs/004-reference-package-rollback.md).

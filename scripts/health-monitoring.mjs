@@ -6,7 +6,7 @@ import { parse } from 'yaml';
 const stateVersion = 1;
 const maxStateBytes = 1_048_576;
 const maxObservations = 9_000;
-/** @typedef {{repository?:string,workloadId?:string,stateFile?:string,evidenceOutput?:string,endpoint?:string,fixtureResult?:string,runUrl?:string,policyPath?:string}} HealthOptions */
+/** @typedef {{repository?:string,workloadId?:string,stateFile?:string,evidenceOutput?:string,endpoint?:string,fixtureResult?:string,runUrl?:string,policyPath?:string,deploymentReceipt?:string}} HealthOptions */
 /** @typedef {{clock?:()=>number,fetch?:typeof fetch,policy?:any,githubToken?:string}} HealthDependencies */
 /** @typedef {{issueNumber:number,issueUrl:string,marker:string,openedAt:string}} Incident */
 /** @typedef {{maintain:(incident:Incident)=>Promise<'active'|'reopened'>,open:(key:string,workloadId:string,endpointHost:string,openedAt:string,failureCount:number,runUrl?:string)=>Promise<Incident>,recover:(incident:Incident,recoveredAt:string,durationMinutes:number,latestStatus:string)=>Promise<{issueNumber:number,issueUrl:string}>}} IncidentAdapter */
@@ -62,6 +62,7 @@ function validateState(state, key) {
       !state.observations.every(/** @param {any} item */ item => Number.isFinite(item.at) && item.at <= Date.now() && ['healthy', 'failed', 'timeout'].includes(item.status) && Number.isFinite(item.durationMs) && item.durationMs >= 0) ||
       !(state.incident === null || (state.incident && Number.isInteger(state.incident.issueNumber) && state.incident.issueNumber > 0 && typeof state.incident.openedAt === 'string' && Number.isFinite(Date.parse(state.incident.openedAt)) && typeof state.incident.issueUrl === 'string' && (state.incident.marker === undefined || typeof state.incident.marker === 'string'))) ||
       !Number.isSafeInteger(state.consecutiveFailures ?? 0) || (state.consecutiveFailures ?? 0) < 0 ||
+      !(state.deploymentIdentity === undefined || typeof state.deploymentIdentity === 'string' && /^[a-f0-9]{64}$/.test(state.deploymentIdentity)) ||
       !(state.completedIncidents === undefined || Array.isArray(state.completedIncidents) && state.completedIncidents.every(/** @param {any} item */ item => Number.isFinite(item.durationMinutes) && item.durationMinutes >= 0 && Number.isFinite(item.recoveredAt)))) {
     throw new Error('Health state is invalid or belongs to a different endpoint/workload. Resolve the incident and reset the retained state artifact explicitly.');
   }
@@ -245,10 +246,25 @@ export async function monitorHealth(options, dependencies = {}) {
     const stateFile = options.stateFile ?? '';
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(workloadId) || !stateFile) throw new Error('Repository, workload ID, and retained state file are required.');
     if (options.evidenceOutput && resolve(options.evidenceOutput) === resolve(stateFile)) throw new Error('Health state and evidence must use separate output files.');
+    if (options.deploymentReceipt && [stateFile, options.evidenceOutput].some(path => path && resolve(path) === resolve(options.deploymentReceipt ?? ''))) throw new Error('Health outputs must not overwrite deployment evidence.');
     if (fixtureResult && !['healthy', 'failed', 'timeout'].includes(fixtureResult)) throw new Error('Fixture result must be healthy, failed, or timeout.');
     endpoint = fixtureResult ? new URL(options.endpoint ?? 'https://fixture.invalid/health') : validateEndpoint(options.endpoint ?? process.env.FACTORY_HEALTH_ENDPOINT);
     const key = sha256(`${repository.toLowerCase()}\n${workloadId}\n${endpoint.href}`);
     state = readState(resolve(stateFile), key, at, policy.slos.window_days);
+    let deployment;
+    if (options.deploymentReceipt) {
+      const info = lstatSync(options.deploymentReceipt);
+      if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) throw new Error('Deployment receipt must be a regular file.');
+      const receipt = JSON.parse(readFileSync(options.deploymentReceipt, 'utf8'));
+      if (receipt.schemaVersion !== 1 || receipt.repository?.toLowerCase() !== repository.toLowerCase() || receipt.outcome !== 'success' || !/^[A-Za-z0-9._-]{1,100}$/.test(receipt.environment ?? '') || !/^[a-f0-9]{40}$/.test(receipt.sourceRevision ?? '') || !/^[a-f0-9]{64}$/.test(receipt.artifactDigest ?? '') || !/^\d{1,20}$/.test(receipt.approval?.runId ?? '') || !Number.isFinite(Date.parse(receipt.deployedAt)) || Date.parse(receipt.deployedAt) > at) throw new Error('Deployment correlation evidence is malformed.');
+      deployment = { environment: receipt.environment, deploymentId: receipt.approval.runId, artifactDigest: receipt.artifactDigest, sourceRevision: receipt.sourceRevision };
+      const identity = sha256(JSON.stringify(deployment));
+      if (state.deploymentIdentity !== identity) state.consecutiveFailures = 0;
+      state.deploymentIdentity = identity;
+    } else if (state.deploymentIdentity) {
+      state.consecutiveFailures = 0;
+      delete state.deploymentIdentity;
+    }
     let probe;
     if (fixtureResult) probe = { status: fixtureResult, httpStatus: fixtureResult === 'healthy' ? 200 : fixtureResult === 'failed' ? 503 : null, durationMs: fixtureResult === 'timeout' ? policy.checks.timeout_seconds * 1000 : 4 };
     else probe = await probeEndpoint(endpoint, policy.checks.timeout_seconds, policy.checks.expected_status_codes, fetchImpl, clock);
@@ -290,13 +306,13 @@ export async function monitorHealth(options, dependencies = {}) {
     report = {
       operation: 'health-monitoring', outcome: failed ? 'failed' : 'passed', simulated: Boolean(fixtureResult),
       results: [{ capability: 'health-monitoring', status: healthStatus, required: true, reason: failed ? `Endpoint probe ${probe.status}; ${state.consecutiveFailures} consecutive failure(s), alert threshold ${policy.checks.consecutive_failures_for_alert}.` : 'Endpoint returned a policy-accepted status.' }],
-      evidence: { repository, workloadId, endpointHost: endpoint.host, endpointDigest: key, observedAt, probe, consecutiveFailures: state.consecutiveFailures, incidentAction, ...(incidentLink ? { incidentUrl: incidentLink } : {}), metrics },
+      evidence: { repository, workloadId, endpointHost: endpoint.host, endpointDigest: key, observedAt, probe, consecutiveFailures: state.consecutiveFailures, ...(deployment ? { deployment } : {}), incidentAction, ...(incidentLink ? { incidentUrl: incidentLink } : {}), metrics },
     };
     saveJson(stateFile, state);
   } catch (error) {
     report = { operation: 'health-monitoring', outcome: 'blocked', simulated: Boolean(fixtureResult), results: [{ capability: 'health-monitoring', status: 'error', required: true, reason: error instanceof Error ? error.message : 'Health monitoring failed closed.' }] };
     if (state && options.stateFile) { try { saveJson(options.stateFile, state); } catch { /* Preserve the primary fail-closed report. */ } }
   }
-  if (options.evidenceOutput && (!options.stateFile || resolve(options.evidenceOutput) !== resolve(options.stateFile))) saveJson(options.evidenceOutput, { schemaVersion: 1, ...report });
+  if (options.evidenceOutput && (!options.stateFile || resolve(options.evidenceOutput) !== resolve(options.stateFile)) && (!options.deploymentReceipt || resolve(options.evidenceOutput) !== resolve(options.deploymentReceipt))) saveJson(options.evidenceOutput, { schemaVersion: 1, ...report });
   return report;
 }

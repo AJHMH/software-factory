@@ -76,6 +76,12 @@ const capabilities = {
     requiredForRelease: false,
     available: true,
   },
+  'artifact-rollback': {
+    reason: 'rollback evaluates correlated health failures and restores a compatible retained reference package; this report supplies no executed recovery evidence.',
+    trackingIssue: 18,
+    requiredForRelease: false,
+    available: true,
+  },
   'agent-remediation': {
     reason: 'Authorized bounded JSON formatting is available via remediate and local-remediate; local publication requires operator approval of the exact proposal digest. This report supplies no executed request evidence.',
     available: true,
@@ -104,6 +110,12 @@ const capabilities = {
 
 const args = process.argv.slice(2);
 const [command, capability, requiredFlag] = args;
+
+if (command === 'rollback' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--mode','--repository','--actor','--trusted-repo','--trusted-revision','--environment','--deployment-receipt','--health-evidence','--state-directory'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
+  const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
+  const report=(await import('./artifact-rollback.mjs')).rollbackArtifact(options);
+  publish(report);process.exit(['restored','eligible','not-required'].includes(report.outcome)?0:1);
+}
 
 if (command === 'dependencies' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--mode','--trusted-repo','--trusted-revision','--repository','--pull-request','--output'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
  const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
@@ -153,6 +165,7 @@ function publish(report) {
       report.operation === 'certify' ? 'Release certification evaluates exact-revision evidence and live GitHub controls; it does not publish a release or deploy.' :
       report.operation === 'release' ? 'Release preparation verifies exact-revision certification and artifact digests; it does not publish. The trusted GitHub release workflow signs and publishes.' :
       report.operation === 'promote' ? 'Promotion consumes an already-signed, certified release without rebuilding. GitHub Environment protection gates hosted execution.' :
+      report.operation === 'rollback' ? 'Reference package restoration and integrity verification only; this report does not establish running service recovery or hosted authorization.' :
       report.operation === 'health-monitoring' ? 'Endpoint probe and GitHub incident evidence only; GitHub scheduling is best effort and this check does not page or roll back.' :
         'This is a capability report, not evidence of a clean workload check or permission to act.',
       '',
@@ -165,12 +178,12 @@ function publish(report) {
   console.log(JSON.stringify({ schemaVersion: 1, ...report }));
 }
 
-if (command === 'health-monitoring' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--repository','--workload-id','--state-file','--evidence-output','--policy','--endpoint','--fixture-result','--run-url'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
+if (command === 'health-monitoring' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--repository','--workload-id','--state-file','--evidence-output','--policy','--endpoint','--fixture-result','--run-url','--deployment-receipt'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
   const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
   const report=await (await import('./health-monitoring.mjs')).monitorHealth({
     repository: options['--repository'], workloadId: options['--workload-id'], stateFile: options['--state-file'],
     evidenceOutput: options['--evidence-output'], policyPath: options['--policy'], endpoint: options['--endpoint'],
-    fixtureResult: options['--fixture-result'], runUrl: options['--run-url'],
+    fixtureResult: options['--fixture-result'], runUrl: options['--run-url'], deploymentReceipt: options['--deployment-receipt'],
   });
   publish(report);process.exitCode=report.outcome==='passed'?0:1;
 } else if (command === 'local-remediate' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--trusted-repo','--trusted-revision','--repository-path','--repository','--state-dir','--mode','--source-branch','--source-revision','--path','--request-id','--approve','--expected-proposal-digest','--private-key-path','--app-id','--installation-id'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
@@ -229,6 +242,6 @@ if (command === 'health-monitoring' && args.length >= 3 && args.length % 2 === 1
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs health-monitoring --repository <owner/repo> --workload-id <id> --state-file <file> --evidence-output <file> [--run-url <url>] | promote --mode apply --repository <owner/repo> --actor <login> --trusted-repo <path> --trusted-revision <SHA> --environment <name> --release-manifest <manifest.json> --certificate <certificate.json> --artifact-directory <assets-dir> --approval-evidence <github-environment-evidence.json> --state-directory <external-dir> [--previous-stable <deployment.json>] [--output <receipt.json>] | release --mode prepare --repository <owner/repo> --source-revision <SHA> --actor <login> --trusted-repo <path> --certificate <json> --artifact-directory <dir> --output-directory <new-dir> [--certificate-run <id> --certificate-run-metadata <json> --producer-run <id> --producer-run-metadata <json>] | local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> --scope-id <id> | inventory | capability <name> [--required] | certify | validate [--contract <path>] [--evidence-output <file>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs rollback --mode <evaluate|apply> --repository <owner/repo> --actor <login> --trusted-repo <path> --trusted-revision <SHA> --environment reference --state-directory <external-dir> --deployment-receipt <receipt.json> --health-evidence <health.json> | health-monitoring --repository <owner/repo> --workload-id <id> --state-file <file> --evidence-output <file> [--run-url <url>] | promote --mode apply --repository <owner/repo> --actor <login> --trusted-repo <path> --trusted-revision <SHA> --environment <name> --release-manifest <manifest.json> --certificate <certificate.json> --artifact-directory <assets-dir> --approval-evidence <github-environment-evidence.json> --state-directory <external-dir> [--previous-stable <deployment.json>] [--output <receipt.json>] | release --mode prepare --repository <owner/repo> --source-revision <SHA> --actor <login> --trusted-repo <path> --certificate <json> --artifact-directory <dir> --output-directory <new-dir> [--certificate-run <id> --certificate-run-metadata <json> --producer-run <id> --producer-run-metadata <json>] | local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> --scope-id <id> | inventory | capability <name> [--required] | certify | validate [--contract <path>] [--evidence-output <file>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }
