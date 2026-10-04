@@ -18,9 +18,8 @@ Restore enforcement only after these tracked requirements are demonstrated:
   replacing the review status report with revision-bound evaluation. Its own
   policy is being adapted to the owner's solo-developer model: one authorized human
   (`aaron-howard`) approves proposals authored by a dedicated Factory GitHub App.
-  Current PR #26 uses the owner's identity and requires replacement once the App
-  is installed. The previous main policy still requires two approvals until an
-  explicitly governed one-review policy bootstrap is adopted.
+  App-authored PR #27 received the owner's current review and merged. The
+  single-owner policy is on main; the temporary reviewed-policy pin was removed.
   Main now requires the evaluated human-review check and a native one-review
   minimum, retaining stale-review dismissal and existing protections. Hosted
   [missing-approval denial](https://github.com/AJHMH/software-factory/actions/runs/37157111221)
@@ -31,6 +30,13 @@ Restore enforcement only after these tracked requirements are demonstrated:
   Move Human Review's evaluator/workflow authority out of the candidate tree and
   verify approval revocation, updated bases, and merge-time revalidation. A trusted
   policy file alone does not prevent candidate evaluator/workflow tampering.
+  Protection bootstrap and drift inspection are implemented with hosted
+  integration evidence in [governance integration evidence](governance-integration-evidence.md).
+  The trusted base workflow adds a separate human-review job. Activate its
+  required check after landing and verify it on a subsequent PR. Complete
+  scheduled bypass inspection needs a scoped Administration-read credential;
+  the default Actions token was observed to omit bypass actors. Team-plan check
+  identity does not attest workflow provenance; that limitation remains explicit.
 - #14: Combine these results into exact-revision release certification; keep
   publication disabled until every required capability is verified.
 

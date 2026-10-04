@@ -60,3 +60,7 @@ test('stronger inherited controls satisfy policy but candidate policy and wrong 
   writeFileSync(join(f.repo,'policies/governance.yaml'),'invalid candidate policy');assert.equal(f.run().status,0);
   f.evidence.repository='other/repo';assert.equal(f.run().status,1);
 });
+test('withheld bypass visibility blocks drift and bootstrap before mutation',t=>{
+  const f=fixture(t);delete f.evidence.rulesets[0].bypass_actors;
+  const r=f.hosted('bootstrap-governance',['--apply','true']);assert.equal(r.status,1);assert.match(r.report.results[0].reason,/administration-read/);assert.deepEqual(r.state.rulesets,f.evidence.rulesets);
+});

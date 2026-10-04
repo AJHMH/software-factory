@@ -49,7 +49,7 @@ test('operators can inventory every capability without implying any gate passed'
   assert.equal(result.status, 0);
   const report = JSON.parse(result.stdout);
   assert.equal(report.outcome, 'unsupported');
-  assert.equal(report.results.length, 12);
+  assert.equal(report.results.length, 13);
   assert.ok(report.results.some((gate) => gate.capability === 'contract-validation' && gate.status === 'available'));
   assert.ok(report.results.every((gate) => ['available', 'unsupported'].includes(gate.status) && gate.reason && gate.trackingIssue));
 });

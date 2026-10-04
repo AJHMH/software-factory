@@ -21,6 +21,11 @@ supports offline inspection, explicitly reporting that a supplied snapshot does
 not establish live enforcement. Collection includes inherited organization rules,
 full ruleset details and bounded pagination. API access or entitlement failures
 block the result with an actionable message; they never imply enforcement.
+GitHub can withhold bypass actors from `GITHUB_TOKEN` responses. In that case the
+scheduled job fails closed. Configure `FACTORY_GOVERNANCE_READ_TOKEN` with only
+repository-scoped Administration read permission for complete inspection, or run
+the command locally with an authorized administrator. A GET-only inspector does
+not need administration write; do not give the workflow a bootstrap token.
 
 Bootstrap is opt-in. It creates or updates only the repository ruleset named
 `Factory governed default branch`, requiring administration write access. Existing

@@ -24,6 +24,7 @@ function matches(pattern,ref) {
 function differences(snapshot,policy) {
   if(!snapshot || typeof snapshot.default_branch !== 'string' || !snapshot.default_branch || !Array.isArray(snapshot.rulesets)) throw new Error('Incomplete Governance snapshot.');
   const active=snapshot.rulesets.filter(r=>{
+    if(!Array.isArray(r.bypass_actors)) throw new Error('GitHub withheld bypass actors. Use a repository-scoped administration-read credential for drift inspection; enforcement is not established.');
     if(typeof r.name !== 'string' || !Array.isArray(r.rules) || !Array.isArray(r.bypass_actors) || !Array.isArray(r.conditions?.ref_name?.include) || !Array.isArray(r.conditions?.ref_name?.exclude)) throw new Error('Malformed ruleset evidence.');
     return r.target === 'branch' && r.enforcement === 'active' && !r.bypass_actors.length && r.conditions.ref_name.include.some(p=>matches(p,`refs/heads/${snapshot.default_branch}`)) && !r.conditions.ref_name.exclude.some(p=>matches(p,`refs/heads/${snapshot.default_branch}`));
   });
@@ -75,13 +76,14 @@ export async function collectGovernance(options) {
     const policy=authority(options),before=await collect(repository);
     if(options['--apply'] !== undefined && options['--apply'] !== 'true') throw new Error('Bootstrap requires explicit --apply true.');
     if(options['--apply'] === 'true') {
+      differences(before,policy); // Verify complete visibility before any mutation.
       const owned=before.rulesets.filter(r=>r.name === managedName && r.source_type === 'Repository');
       if(owned.length > 1) throw new Error('Ambiguous managed rulesets; resolve duplicates before bootstrap.');
       const existing=owned[0],rules=structuredClone(existing?.rules ?? []);
       for(const type of ['deletion','non_fast_forward','required_signatures','required_linear_history']) if(!rules.some(r=>r.type === type)) rules.push({type});
       const pr=rules.find(r=>r.type === 'pull_request') ?? {type:'pull_request',parameters:{}};
       if(!rules.includes(pr)) rules.push(pr);
-      pr.parameters={...pr.parameters,required_approving_review_count:Math.max(pr.parameters?.required_approving_review_count ?? 0,policy.minimum),dismiss_stale_reviews_on_push:true,required_review_thread_resolution:true};
+      pr.parameters={require_code_owner_review:false,require_last_push_approval:false,...pr.parameters,required_approving_review_count:Math.max(pr.parameters?.required_approving_review_count ?? 0,policy.minimum),dismiss_stale_reviews_on_push:true,required_review_thread_resolution:true};
       const checks=rules.find(r=>r.type === 'required_status_checks') ?? {type:'required_status_checks',parameters:{}};
       if(!rules.includes(checks)) rules.push(checks);
       const merged=/** @type {Check[]} */(structuredClone(checks.parameters?.required_status_checks ?? []));

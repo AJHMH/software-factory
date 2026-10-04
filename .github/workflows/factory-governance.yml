@@ -24,7 +24,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Report live protection drift against trusted Governance
         env:
-          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GOVERNANCE_READ_TOKEN || github.token }}
           REPOSITORY: ${{ github.repository }}
           TRUSTED_REVISION: ${{ github.sha }}
         run: node scripts/factory-validation.mjs collect-governance --repository "$REPOSITORY" --trusted-revision "$TRUSTED_REVISION"
