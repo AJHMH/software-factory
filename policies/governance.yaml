@@ -1,5 +1,24 @@
 version: 1.0
 governance:
+  repository_protection:
+    minimum_approvals: 1
+    required_checks:
+      - context: Execute Factory Contract Validation
+        integration_id: 15368
+      - context: Verify Factory safety controls
+        integration_id: 15368
+      - context: Evaluate trusted execution policy
+        integration_id: 15368
+      - context: Enforce Factory coverage
+        integration_id: 15368
+      - context: Enforce Factory secret and dependency policy
+        integration_id: 15368
+      - context: Enforce Factory SAST policy
+        integration_id: 15368
+      - context: Enforce Factory human approval
+        integration_id: 15368
+      - context: Enforce Factory trusted human approval
+        integration_id: 15368
   autonomy_level: "conditional_autonomy" # manual, assisted, governed, conditional_autonomy, dark_factory
   
   audit:

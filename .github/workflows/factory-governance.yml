@@ -1,0 +1,30 @@
+name: Factory Governance Drift
+
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    name: Verify Factory repository governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - name: Report live protection drift against trusted Governance
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GOVERNANCE_READ_TOKEN || github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRUSTED_REVISION: ${{ github.sha }}
+        run: node scripts/factory-validation.mjs collect-governance --repository "$REPOSITORY" --trusted-revision "$TRUSTED_REVISION"

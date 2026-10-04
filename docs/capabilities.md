@@ -33,6 +33,10 @@ The public interface is `node scripts/factory-validation.mjs`:
   `--coverage-evidence github --output <file>` collects workload comparison artifacts.
 - `certify` reports all mandatory release capabilities and always exits 1 with a
   `blocked` outcome. There is no publication or deployment step.
+- `collect-governance --repository <owner/repo> --trusted-revision <SHA>` reports
+  live ruleset drift; `governance --evidence <file>` inspects a supplied snapshot.
+- `bootstrap-governance` accepts the same repository/revision and requires
+  explicit `--apply true` to configure the managed default-branch ruleset.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
 
 Reports contain schema version, operation, outcome, and capability results with
@@ -51,6 +55,7 @@ summary. A successful reporting job is never a passing workload check.
 | dependency-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
 | sast-policy | available; actual native analysis/evaluation required | yes | #7 implemented; #9/#14: governance and certification |
 | human-review | available; current independent approval evidence required | yes | #8 implemented; #9: trusted workflow and merge boundary |
+| repository-governance | available; live configuration inspection required | yes | #9: protection bootstrap and drift; see entitlement limits |
 | release-certification | unsupported | yes | #14: Exact-revision certification |
 | agent-remediation | unsupported; writes disabled | no | #10/#11: Bounded, authorized remediation |
 | dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |

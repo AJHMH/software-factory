@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
+  actions: read
 
 jobs:
   trusted-policy:
@@ -39,3 +41,37 @@ jobs:
         env:
           TRUSTED_POLICY_REVISION: ${{ github.event.pull_request.base.sha }}
         run: node scripts/factory-validation.mjs policy --trusted-revision "$TRUSTED_POLICY_REVISION" --contract ../candidate/factory-contract.yaml --overrides ../candidate/policy-exceptions.yaml
+  trusted-human-review:
+    name: Enforce Factory trusted human approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout trusted evaluator and policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout candidate as data only
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - working-directory: trusted
+        run: npm ci --ignore-scripts
+      - working-directory: trusted
+        run: node -e "require('node:fs').mkdirSync('tmp', {recursive:true})"
+      - name: Evaluate live approvals using only trusted base code
+        working-directory: trusted
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          BASE_REVISION: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/factory-validation.mjs collect-reviews --contract ../candidate/factory-contract.yaml --trusted-repo . --trusted-revision "$BASE_REVISION" --base-revision "$BASE_REVISION" --repository "$REPOSITORY" --pull-request "$PULL_REQUEST" --coverage-evidence github --output tmp/trusted-human-review.json

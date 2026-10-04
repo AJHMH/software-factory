@@ -3,6 +3,12 @@ import { appendFileSync } from 'node:fs';
 // Execution and scoped policy evaluation are available; hosted authorization and release evidence follow later.
 /** @type {Record<string, { reason: string, trackingIssue: number, requiredForRelease: boolean, available?: boolean }>} */
 const capabilities = {
+  'repository-governance': {
+    reason: 'Protection bootstrap and drift inspection are available via bootstrap-governance and collect-governance; this report supplies no live configuration evidence.',
+    trackingIssue: 9,
+    requiredForRelease: true,
+    available: true,
+  },
   'contract-validation': {
     reason: 'Contract execution is available via validate; this report supplies no executed gate evidence.',
     trackingIssue: 3,
@@ -100,7 +106,12 @@ function publish(report) {
   console.log(JSON.stringify({ schemaVersion: 1, ...report }));
 }
 
-if (['human-review', 'collect-reviews', 'policy', 'coverage', 'measure-coverage', 'security', 'scan-security', 'sast', 'collect-sast'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
+if (['governance','collect-governance','bootstrap-governance'].includes(command) && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--trusted-revision','--trusted-repo','--repository',...(command === 'governance'?['--evidence']:command === 'bootstrap-governance'?['--apply']:[])].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
+  const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
+  const governance=await import('./governance.mjs');
+  const report=command === 'governance'?governance.evaluateGovernance(options):command === 'bootstrap-governance' && options['--apply'] !== 'true'?{operation:'governance',outcome:'blocked',results:[{capability:'repository-governance',required:true,status:'error',reason:'Bootstrap requires explicit --apply true.'}]}:await governance.collectGovernance(options);
+  publish(report);process.exitCode=report.outcome === 'passed'?0:1;
+} else if (['human-review', 'collect-reviews', 'policy', 'coverage', 'measure-coverage', 'security', 'scan-security', 'sast', 'collect-sast'].includes(command) && args.length >= 3 && args.length % 2 === 1 &&
   args.slice(1).every((arg, index) => index % 2 === 1 || ['--contract', '--trusted-repo', '--trusted-revision', ...(['human-review','collect-reviews'].includes(command) ? ['--base-revision','--repository','--pull-request','--coverage-evidence', ...(command === 'human-review' ? ['--evidence'] : ['--output'])] : ['security','sast'].includes(command) ? ['--evidence'] : command === 'collect-sast' ? ['--repository','--ref','--output'] : command === 'scan-security' ? ['--tools-dir', '--output'] : ['--overrides', ...(command === 'coverage' ? ['--evidence', '--base-revision'] : command === 'measure-coverage' ? ['--base-revision', '--output'] : [])])].includes(arg)) &&
   new Set(args.filter((_, index) => index % 2 === 1)).size === (args.length - 1) / 2) {
   const { evaluatePolicy } = await import('./policy-evaluation.mjs');
@@ -139,6 +150,6 @@ if (['human-review', 'collect-reviews', 'policy', 'coverage', 'measure-coverage'
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs governance --repository <owner/repo> --trusted-revision <SHA> --evidence <file> | collect-governance --repository <owner/repo> --trusted-revision <SHA> | bootstrap-governance --repository <owner/repo> --trusted-revision <SHA> --apply true | human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }
