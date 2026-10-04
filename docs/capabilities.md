@@ -41,6 +41,11 @@ The public interface is `node scripts/factory-validation.mjs`:
   live ruleset drift; `governance --evidence <file>` inspects a supplied snapshot.
 - `bootstrap-governance` accepts the same repository/revision and requires
   explicit `--apply true` to configure the managed default-branch ruleset.
+- `health-monitoring --repository <owner/repo> --workload-id <id> --state-file <file>`
+  probes `FACTORY_HEALTH_ENDPOINT`, persists consecutive-failure state, and uses
+  GitHub Issues for thresholded incident/recovery notifications. It requires a
+  configured HTTPS endpoint and a token with `issues: write` when an incident is
+  created or recovered.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
 
 Reports contain schema version, operation, outcome, and capability results with
@@ -64,7 +69,7 @@ summary. A successful reporting job is never a passing workload check.
 | release-certification | unsupported | yes | #14: Exact-revision certification |
 | agent-remediation | available for JSON formatting; local operator gate | no | #11: Authorized remediation and live evidence |
 | dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |
-| health-monitoring | unsupported; alerts/rollback disabled | no | #17/#18: Monitoring and rollback |
+| health-monitoring | available; HTTPS endpoint probes, deduplicated GitHub incidents/recovery, and retained evidence | no | #18: Safe deployment rollback; external paging and non-GitHub alert adapters remain unsupported |
 | release-publication | unsupported; publication/deployment disabled | no | #15/#16: Publication and deployment |
 
 See [contract execution](contract-execution.md) for schema, runtime, shell,
@@ -76,20 +81,23 @@ not enforced by this interface; changing a policy cannot enable a missing capabi
 
 ## GitHub workflow behavior
 
-Factory validation workflows use `contents: read`; hosted remediation only authorizes requests and holds no write credentials. SAST also uses `security-events: read`.
+Factory validation workflows use `contents: read`; hosted remediation only authorizes requests and holds no write credentials. Health monitoring separately receives `actions: read` and `issues: write` for retained state and incident tracking. SAST also uses `security-events: read`.
 Human Review also reads pull requests and Actions coverage artifacts.
-They disable checkout credential
-persistence, and have bounded job timeouts. No workflow approves or merges PRs,
-creates incident issues, publishes
-packages/releases, deploys, or rolls back workloads.
+Checkout credential persistence is disabled and workflows have bounded job timeouts.
+No workflow approves or merges PRs, publishes packages/releases, deploys, or rolls
+back workloads.
 
 CI installs Factory tools, selects the supported runtime from the validated
 contract, and executes the reference workload. Security runs pinned scanners;
 Human Review evaluates current independent reviewers and sensitive changes. Release
 Certification remains blocked and intentionally fails. A separate CI job runs template tests and
 typechecking; its success must not replace workload-required checks in repository
-protections. Dependency and Health schedules only report unsupported status; they
-do not maintain dependencies or measure health. Remediation supports authorized manual/comment/dispatch requests; publication is local, explicitly gated, and described in [local remediation](local-remediation.md).
+protections. Dependency automation updates proposals; health monitoring probes the
+configured `FACTORY_HEALTH_ENDPOINT` every five minutes on a best-effort schedule.
+GitHub Issues are the only implemented alert channel. Health checks do not perform
+rollback or remediation. Remediation supports authorized manual/comment/dispatch
+requests; publication is local, explicitly gated, and described in
+[local remediation](local-remediation.md).
 
 The new Trusted Policy workflow reads evaluator and policy from the base revision,
 with candidate files used as data only. It requires governance-approved bootstrap

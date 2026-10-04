@@ -2,27 +2,70 @@ name: Factory Health Checks
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: factory-health-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   evaluate-health:
-    name: Report Unsupported Health Monitoring
+    name: Monitor deployed workload health
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
+      - name: Checkout trusted default branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Set up Factory tooling
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Report Factory capability inventory
-        run: node scripts/factory-validation.mjs inventory
-      - name: Report capability outcome
-        run: node scripts/factory-validation.mjs capability health-monitoring
+      - name: Install Factory dependencies
+        run: npm ci --ignore-scripts
+      - name: Restore preceding health state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        run: |
+          mkdir -p tmp/previous-health-state
+          previous_run=$(gh api "repos/$REPOSITORY/actions/workflows/factory-health.yml/runs?per_page=20" --jq ".workflow_runs | map(select(.id != $CURRENT_RUN_ID and .status == \"completed\" and .head_branch == \"main\")) | .[0].id // empty")
+          if [ -n "$previous_run" ]; then
+            artifact=$(gh api "repos/$REPOSITORY/actions/runs/$previous_run/artifacts?per_page=100" --jq '.artifacts[] | select(.name == "factory-health-state" and .expired == false) | .name' | head -n 1)
+            if [ -n "$artifact" ]; then
+              gh run download "$previous_run" --repo "$REPOSITORY" --name factory-health-state --dir tmp/previous-health-state
+              if [ -f tmp/previous-health-state/health-state.json ]; then cp tmp/previous-health-state/health-state.json tmp/health-state.json; fi
+            fi
+          fi
+      - name: Probe configured workload endpoint and manage incident state
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FACTORY_HEALTH_ENDPOINT: ${{ vars.FACTORY_HEALTH_ENDPOINT }}
+          REPOSITORY: ${{ github.repository }}
+          WORKLOAD_ID: ${{ vars.FACTORY_WORKLOAD_ID || 'factory-reference-workload' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          node scripts/factory-validation.mjs health-monitoring
+          --repository "$REPOSITORY" --workload-id "$WORKLOAD_ID"
+          --state-file tmp/health-state.json --evidence-output tmp/health-evidence.json
+          --run-url "$RUN_URL"
+      - name: Retain health state and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-health-state
+          path: |
+            tmp/health-state.json
+            tmp/health-evidence.json
+          if-no-files-found: warn
+          retention-days: 90
