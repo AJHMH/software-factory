@@ -92,6 +92,29 @@ test('CI uploads one source-bound build and the release consumer retrieves it wi
   assert.ok(!JSON.stringify(release).includes('npm run build'));
 });
 
+test('release certification and publication keep authority separated and provenance verifiable',()=>{
+  const certification=parse(readFileSync(join(root,'.github/workflows/factory-certify-release.yml'),'utf8'));
+  assert.deepEqual(Object.keys(certification.on),['workflow_dispatch']);assert.deepEqual(certification.permissions,{contents:'read',actions:'read'});
+  const certify=certification.jobs['certify-release'];assert.equal(certify.permissions,undefined);assert.equal(certify['continue-on-error'],undefined);
+  assert.ok(!certification.jobs['certify-release'].env.FACTORY_GITHUB_TOKEN);assert.ok(!certification.jobs['certify-release'].env.EVIDENCE_BUNDLE);
+  assert.ok(certify.steps.find(step=>step.run?.includes('release-workflow.mjs authorize')));
+  assert.ok(certify.steps.find(step=>step.run?.includes('release-workflow.mjs verify-producer')));
+  const certifyStep=certify.steps.find(step=>step.run?.includes('release-workflow.mjs certify'));
+  assert.deepEqual(Object.keys(certifyStep.env).sort(),['EVIDENCE_BUNDLE','FACTORY_GITHUB_TOKEN']);
+  assert.equal(certify.steps.at(-1).uses,'actions/upload-artifact@v4');assert.equal(certify.steps.at(-1).with['if-no-files-found'],'error');
+
+  const publication=parse(readFileSync(join(root,'.github/workflows/factory-publish-release.yml'),'utf8'));
+  assert.deepEqual(Object.keys(publication.on),['workflow_dispatch']);assert.deepEqual(publication.permissions,{contents:'read',actions:'read'});
+  assert.deepEqual(publication.concurrency,{'group':'factory-publish-release-production','cancel-in-progress':false});
+  const job=publication.jobs['publish-release'];assert.deepEqual(job.permissions,{contents:'write',actions:'read','id-token':'write',attestations:'write'});
+  assert.equal(job.steps[0].with['persist-credentials'],false);
+  assert.ok(job.steps.some(step=>step.run?.includes('release-workflow.mjs prepare')));
+  const attest=job.steps.find(step=>step.uses==='actions/attest@v4');assert.equal(attest.with['subject-path'],'tmp/release/assets/*');
+  assert.ok(job.steps.some(step=>step.run?.includes('gh attestation verify')&&step.run.includes('--signer-workflow')));
+  assert.ok(job.steps.some(step=>step.run?.includes('--draft')));assert.ok(job.steps.some(step=>step.run?.includes('--draft=false')));
+  assert.ok(!JSON.stringify(publication).includes('FACTORY_GITHUB_TOKEN'));
+});
+
 test('SAST CI evaluates exact-head native analyses with read-only security permissions',()=>{
   const workflow=parse(readFileSync(join(root,'.github/workflows/factory-sast.yml'),'utf8'));
   assert.deepEqual(workflow.permissions,{contents:'read','security-events':'read'});

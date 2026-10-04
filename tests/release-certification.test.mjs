@@ -9,6 +9,8 @@ import { certifyRelease } from '../scripts/release-certification.mjs';
 
 const root = process.cwd();
 const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+const pullRequestHead = spawnSync('git', ['rev-parse', 'HEAD^^'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+const baseRevision = spawnSync('git', ['rev-parse', 'HEAD^'], { cwd: root, encoding: 'utf8' }).stdout.trim();
 const token = process.env.FACTORY_GITHUB_TOKEN;
 process.env.FACTORY_GITHUB_TOKEN = 'test-token';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -25,15 +27,15 @@ function report(operation, properties = {}) {
 }
 function fixture(overrides = {}) {
   const evidence = { version: '1.0', revision, reports: {
-    validation: report('validate'), policy: report('policy'), coverage: report('coverage', { baseRevision: revision }), security: report('security'), sast: report('sast'),
-    human_review: report('human-review', { repository: 'AJHMH/software-factory', pullRequest: 1, requiredApprovals: 1, approvals: [{ id: 17, login: 'aaron-howard', revision }], changesRequested: [] }),
+    validation: report('validate'), policy: report('policy'), coverage: report('coverage', { baseRevision }), security: report('security'), sast: report('sast'),
+    human_review: report('human-review', { revision: pullRequestHead, trustedRevision: baseRevision, repository: 'AJHMH/software-factory', pullRequest: 1, requiredApprovals: 1, approvals: [{ id: 17, login: 'aaron-howard', revision: pullRequestHead }], changesRequested: [] }),
   }, ...overrides };
   const file = join(tmp, `evidence-${Math.random().toString(36).slice(2)}.json`);
   writeFileSync(file, JSON.stringify(evidence));
   const responses = new Map([
-    [`/repos/AJHMH/software-factory/pulls/1`, { state: 'closed', merged: true, head: { sha: revision }, base: { ref: 'main', sha: revision }, user: { login: 'factory-bot' } }],
+    [`/repos/AJHMH/software-factory/pulls/1`, { state: 'closed', merged: true, head: { sha: pullRequestHead }, merge_commit_sha: revision, base: { ref: 'main', sha: baseRevision }, user: { login: 'factory-bot' } }],
     [`/repos/AJHMH/software-factory/commits/${revision}/check-runs?filter=latest&per_page=100`, { check_runs: checks.map(check => ({ name: check.context, app: { id: check.integration_id }, head_sha: revision, status: 'completed', conclusion: 'success' })) }],
-    [`/repos/AJHMH/software-factory/pulls/1/reviews?per_page=100`, [{ id: 17, state: 'APPROVED', commit_id: revision, submitted_at: '2026-10-04T12:00:00Z', user: { login: 'aaron-howard', type: 'User' } }]],
+    [`/repos/AJHMH/software-factory/pulls/1/reviews?per_page=100`, [{ id: 17, state: 'APPROVED', commit_id: pullRequestHead, submitted_at: '2026-10-04T12:00:00Z', user: { login: 'aaron-howard', type: 'User' } }]],
     [`/repos/AJHMH/software-factory/issues?state=open&per_page=100`, []],
     [`/repos/AJHMH/software-factory/collaborators/aaron-howard/permission`, { permission: 'write' }],
   ]);
@@ -57,9 +59,10 @@ test('public certification reports pass only after all same-revision evidence an
   const certificate = await certifyRelease(f.options, f.dependencies);
   assert.equal(certificate.outcome, 'certified');
   assert.equal(certificate.revision, revision);
-  assert.equal(certificate.approvers[0].revision, revision);
+  assert.equal(certificate.approvers[0].revision, pullRequestHead);
   assert.equal(certificate.artifact.sbomSha256, sha256('sbom'));
-  assert.equal(certificate.gateEvidence.coverage.baseRevision, revision);
+  assert.equal(certificate.gateEvidence.coverage.baseRevision, baseRevision);
+  assert.equal(certificate.reviewedPullRequestHead, pullRequestHead);
   assert.equal(certificate.releasePolicy.maximumMediumDefects, 5);
   assert.equal(JSON.parse(readFileSync(output, 'utf8')).outcome, 'certified');
 });
@@ -100,22 +103,22 @@ test('defects above the trusted severity limit block certification', async () =>
 
 test('requested changes block certification even when an approval exists', async () => {
   const f = fixture(); f.responses.set('/repos/AJHMH/software-factory/pulls/1/reviews?per_page=100', [
-    { id: 17, state: 'APPROVED', commit_id: revision, submitted_at: '2026-10-04T12:00:00Z', user: { login: 'aaron-howard', type: 'User' } },
-    { id: 18, state: 'CHANGES_REQUESTED', commit_id: revision, submitted_at: '2026-10-04T12:01:00Z', user: { login: 'aaron-howard', type: 'User' } },
+    { id: 17, state: 'APPROVED', commit_id: pullRequestHead, submitted_at: '2026-10-04T12:00:00Z', user: { login: 'aaron-howard', type: 'User' } },
+    { id: 18, state: 'CHANGES_REQUESTED', commit_id: pullRequestHead, submitted_at: '2026-10-04T12:01:00Z', user: { login: 'aaron-howard', type: 'User' } },
   ]);
   const result = await certifyRelease(f.options, f.dependencies);
   assert.equal(result.outcome, 'blocked'); assert.match(result.results[0].reason, /human review requirements/);
 });
 
 test('an unmerged pull request blocks release certification', async () => {
-  const f = fixture(); f.responses.set('/repos/AJHMH/software-factory/pulls/1', { state: 'open', merged: false, head: { sha: revision }, base: { ref: 'main', sha: revision }, user: { login: 'factory-bot' } });
+  const f = fixture(); f.responses.set('/repos/AJHMH/software-factory/pulls/1', { state: 'open', merged: false, head: { sha: pullRequestHead }, merge_commit_sha: null, base: { ref: 'main', sha: baseRevision }, user: { login: 'factory-bot' } });
   const result = await certifyRelease(f.options, f.dependencies);
   assert.equal(result.outcome, 'blocked'); assert.match(result.results[0].reason, /must be merged into main/);
 });
 
 test('coverage against a different pull request base blocks certification', async () => {
   const f = fixture();
-  f.responses.set('/repos/AJHMH/software-factory/pulls/1', { state: 'closed', merged: true, head: { sha: revision }, base: { ref: 'main', sha: '0'.repeat(40) }, user: { login: 'factory-bot' } });
+  f.evidence.reports.coverage.baseRevision=pullRequestHead;writeFileSync(f.options['--evidence'],JSON.stringify(f.evidence));
   const result = await certifyRelease(f.options, f.dependencies);
   assert.equal(result.outcome, 'blocked'); assert.match(result.results[0].reason, /baseline does not match the pull request base/);
 });

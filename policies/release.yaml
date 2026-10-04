@@ -3,11 +3,21 @@ release:
   versioning:
     strategy: "semantic" # major.minor.patch
     require_conventional_commits: true
+    initial_version: "0.0.0"
+    # Conventional Commit enforcement starts at this mainline baseline; earlier template history is legacy.
+    first_release_baseline: "24d47f48c3ec3713b0ef6ce5f9413ebdd671275b"
 
   certification:
     require_clean_ci: true
     require_clean_security_scan: true
     require_approved_pr: true
+
+  authorization:
+    # Only these human maintainers may create certification artifacts or publish releases.
+    authorized_actors: ["aaron-howard"]
+    require_workflow_dispatch_from_main: true
+    reject_workflow_reruns: true
+    reject_existing_tags_or_releases: true
 
   rollback:
     require_rollback_plan_in_pr: false

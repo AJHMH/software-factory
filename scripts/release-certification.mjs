@@ -66,13 +66,14 @@ export async function certifyRelease(options, dependencies = {}) {
     requireReport(evidence.reports.coverage, 'coverage', revision, trusted);
     requireReport(evidence.reports.security, 'security', revision, trusted);
     requireReport(evidence.reports.sast, 'sast', revision, trusted);
-    requireReport(evidence.reports.human_review, 'human-review', revision, trusted);
     const coverageBase = evidence.reports.coverage.baseRevision;
     if (!/^[a-f0-9]{40}$/.test(coverageBase ?? '') || git(trustedRepo, ['cat-file', '-t', coverageBase]) !== 'commit' || git(trustedRepo, ['merge-base', '--is-ancestor', coverageBase, revision]) !== '') throw new Error('Coverage baseline is missing, invalid, or outside the certified source history.');
     const apiPrefix = `repos/${repository}`;
     const pr = await github(`${apiPrefix}/pulls/${prNumber}`, fetchImpl);
-    if (pr.merged !== true || pr.state !== 'closed' || pr.head?.sha !== revision || pr.base?.ref !== 'main') throw new Error('The pull request must be merged into main at the exact evidence revision.');
-    if (pr.base?.sha !== coverageBase) throw new Error('Coverage evidence baseline does not match the pull request base revision.');
+    if (pr.merged !== true || pr.state !== 'closed' || !/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '') || pr.merge_commit_sha !== revision || pr.base?.ref !== 'main') throw new Error('The pull request must be merged into main, and the certificate revision must be its exact squash/merge commit.');
+    const mergedBase = git(trustedRepo, ['rev-parse', `${revision}^1`]);
+    if (coverageBase !== mergedBase) throw new Error('Coverage evidence baseline does not match the pull request base revision.');
+    requireReport(evidence.reports.human_review, 'human-review', pr.head.sha, mergedBase);
     const [checkData, reviews, issueData] = await Promise.all([
       github(`${apiPrefix}/commits/${revision}/check-runs?filter=latest&per_page=100`, fetchImpl),
       github(`${apiPrefix}/pulls/${prNumber}/reviews?per_page=100`, fetchImpl),
@@ -92,7 +93,7 @@ export async function certifyRelease(options, dependencies = {}) {
     const allow = new Set(humanPolicy.human_approvers.map((/** @type {string} */ login) => login.toLowerCase()));
     const agentAccounts = new Set((humanPolicy.agent_accounts ?? []).map((/** @type {string} */ login) => login.toLowerCase()));
     const exceptionParticipants = new Set(Object.values(evidence.reports).flatMap(report => (report.exceptions ?? []).flatMap((/** @type {Json} */ exception) => [String(exception.approver ?? '').toLowerCase(), String(exception.owner ?? '').toLowerCase()]).filter(Boolean)));
-    const approvals = [...reviewerStates.values()].filter(review => review.state === 'APPROVED' && review.commit_id === revision && review.user.type === 'User' && allow.has(review.user.login.toLowerCase()) && !agentAccounts.has(review.user.login.toLowerCase()) && !exceptionParticipants.has(review.user.login.toLowerCase()) && review.user.login.toLowerCase() !== pr.user?.login?.toLowerCase());
+    const approvals = [...reviewerStates.values()].filter(review => review.state === 'APPROVED' && review.commit_id === pr.head.sha && review.user.type === 'User' && allow.has(review.user.login.toLowerCase()) && !agentAccounts.has(review.user.login.toLowerCase()) && !exceptionParticipants.has(review.user.login.toLowerCase()) && review.user.login.toLowerCase() !== pr.user?.login?.toLowerCase());
     const requiredApprovals = evidence.reports.human_review.requiredApprovals;
     if (!Number.isSafeInteger(requiredApprovals) || requiredApprovals < governancePolicy.minimum_approvals || approvals.length < requiredApprovals || [...reviewerStates.values()].some(review => review.state === 'CHANGES_REQUESTED')) throw new Error('Current independent human review requirements are not satisfied.');
     if (evidence.reports.human_review.repository?.toLowerCase() !== repository.toLowerCase() || evidence.reports.human_review.pullRequest !== prNumber || !Array.isArray(evidence.reports.human_review.approvals) || evidence.reports.human_review.approvals.length < requiredApprovals || (evidence.reports.human_review.changesRequested ?? []).length) throw new Error('Human-review report does not match this pull request or its current approval requirement.');
@@ -138,7 +139,7 @@ export async function certifyRelease(options, dependencies = {}) {
     const reportDigests = Object.fromEntries(Object.entries(evidence.reports).map(([key, report]) => [key, report.evidenceDigest ?? report.contractDigest]));
     const certifiedAt = new Date().toISOString();
     const certificate = {
-      schemaVersion: 1, operation: 'certify', outcome: 'certified', repository, pullRequest: prNumber, revision, baseRevision: coverageBase, hostedBaseRevision: pr.base.sha,
+      schemaVersion: 1, operation: 'certify', outcome: 'certified', repository, pullRequest: prNumber, revision, baseRevision: coverageBase, hostedBaseRevision: mergedBase, reviewedPullRequestHead: pr.head.sha,
       trustedRevision: trusted, certifiedAt, approvers: approvals.map(review => ({ login: review.user.login, reviewId: review.id, revision: review.commit_id })),
       policyDigests: { governance: governance.policyDigest, execution: evidence.reports.policy.policyDigest, quality: evidence.reports.coverage.qualityDigest, security: evidence.reports.security.policyDigest, sast: evidence.reports.sast.policyDigest, contract: evidence.reports.validation.contractDigest },
       releasePolicy: { defectZeroSeverity: quality.zero_open_defects_severity, maximumMediumDefects: limits.medium, maximumLowDefects: limits.low, dependencySource: dependencyPolicy.artifact, dependencyAssurance: assurance },

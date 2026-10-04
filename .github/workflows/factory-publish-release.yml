@@ -1,0 +1,117 @@
+name: Factory Publish Signed Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact current main commit covered by certification
+        required: true
+        type: string
+      certification_run_id:
+        description: Successful Factory Release Certification workflow run ID
+        required: true
+        type: string
+      producer_run_id:
+        description: Successful Factory CI artifact producer run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: factory-publish-release-production
+  cancel-in-progress: false
+
+jobs:
+  publish-release:
+    name: Publish certified semantic release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+      attestations: write
+    env:
+      SOURCE_REVISION: ${{ inputs.source_revision }}
+      CERTIFICATION_RUN_ID: ${{ inputs.certification_run_id }}
+      PRODUCER_RUN_ID: ${{ inputs.producer_run_id }}
+    steps:
+      - name: Checkout trusted main history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Factory tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned Factory tools
+        run: npm ci --ignore-scripts
+      - name: Verify caller and exact revision
+        run: node scripts/release-workflow.mjs authorize --source-revision "$SOURCE_REVISION" --trusted-revision "$GITHUB_SHA" --actor "$GITHUB_ACTOR"
+      - name: Retrieve trusted workflow run metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$CERTIFICATION_RUN_ID" =~ ^[0-9]{1,20}$ && "$PRODUCER_RUN_ID" =~ ^[0-9]{1,20}$ ]]
+          mkdir -p tmp/run-metadata
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" == "$SOURCE_REVISION" ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CERTIFICATION_RUN_ID" > tmp/run-metadata/certification.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID" > tmp/run-metadata/producer.json
+      - name: Download successful certification artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: factory-release-certificate-${{ inputs.source_revision }}-${{ inputs.certification_run_id }}
+          path: tmp/certificate
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.certification_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download certified source artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: factory-reference-workload-${{ inputs.source_revision }}-${{ inputs.producer_run_id }}
+          path: tmp/release-artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.producer_run_id }}
+          github-token: ${{ github.token }}
+      - name: Prepare semantic version, notes, and exact release assets
+        id: prepare
+        run: node scripts/release-workflow.mjs prepare --source-revision "$SOURCE_REVISION" --actor "$GITHUB_ACTOR" --certificate-run "$CERTIFICATION_RUN_ID" --certificate-run-metadata tmp/run-metadata/certification.json --producer-run "$PRODUCER_RUN_ID" --producer-run-metadata tmp/run-metadata/producer.json
+      - name: Refuse existing release
+        env:
+          RELEASE_TAG: ${{ steps.prepare.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing duplicate publication."
+            exit 1
+          fi
+      - name: Sign and attest the exact release assets with GitHub OIDC
+        env:
+          RELEASE_TAG: ${{ steps.prepare.outputs.tag }}
+        uses: actions/attest@v4
+        with:
+          subject-path: tmp/release/assets/*
+      - name: Verify signed provenance against this workflow identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh attestation verify tmp/release/assets/release-manifest.json --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/factory-publish-release.yml" --source-ref refs/heads/main --source-digest "$SOURCE_REVISION"
+      - name: Create draft release and upload all signed assets
+        env:
+          RELEASE_TAG: ${{ steps.prepare.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" == "$SOURCE_REVISION" ]]
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 1; fi
+          gh release create "$RELEASE_TAG" tmp/release/assets/reference-workload.mjs tmp/release/assets/sbom.spdx.json tmp/release/assets/release-certificate.json tmp/release/assets/release-manifest.json --repo "$GITHUB_REPOSITORY" --target "$SOURCE_REVISION" --title "$RELEASE_TAG" --notes-file tmp/release/RELEASE_NOTES.md --draft
+      - name: Publish the complete signed release
+        env:
+          RELEASE_TAG: ${{ steps.prepare.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" == "$SOURCE_REVISION" ]]
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

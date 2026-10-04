@@ -10,6 +10,12 @@ const capabilities = {
     requiredForRelease: false,
     available: true,
   },
+  'versioned-signed-release': {
+    reason: 'Semantic release planning is available via release; only the trusted GitHub workflow can publish or sign a release.',
+    trackingIssue: 15,
+    requiredForRelease: true,
+    available: true,
+  },
   'repository-governance': {
     reason: 'Protection bootstrap and drift inspection are available via bootstrap-governance and collect-governance; this report supplies no live configuration evidence.',
     trackingIssue: 9,
@@ -106,6 +112,11 @@ if (command === 'certify' && args.length >= 11 && args.length % 2 === 1 && args.
   const report=await (await import('./release-certification.mjs')).certifyRelease(options);publish(report);process.exit(report.outcome==='certified'?0:1);
 }
 
+if (command === 'release' && args.length >= 17 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--mode','--repository','--source-revision','--actor','--trusted-repo','--certificate','--artifact-directory','--output-directory','--certificate-run','--certificate-run-metadata','--producer-run','--producer-run-metadata','--github-output'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2 && args[args.indexOf('--mode')+1] === 'prepare') {
+  const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
+  const report=(await import('./release-management.mjs')).prepareRelease(options);publish(report);process.exit(report.outcome==='prepared'?0:1);
+}
+
 /** @param {{ operation: string, outcome: string, results: Array<{ capability: string, status: string, required: boolean, reason: string, trackingIssue?: number }> }} report */
 function publish(report) {
   if (process.env.GITHUB_STEP_SUMMARY) {
@@ -120,7 +131,8 @@ function publish(report) {
         report.operation === 'security' ? 'Redacted scanner evidence applies only to the named revision; it does not authorize a release.' :
       report.operation === 'coverage' ? 'Coverage and test evidence applies only to the named source revisions; it does not authorize a merge or release.' :
       report.operation === 'policy' ? 'Execution-policy evaluation only: no workload commands executed, hosted human approval verified, or release authorized.' :
-        report.operation === 'certify' ? 'Release certification evaluates exact-revision evidence and live GitHub controls; it does not publish a release or deploy.' :
+      report.operation === 'certify' ? 'Release certification evaluates exact-revision evidence and live GitHub controls; it does not publish a release or deploy.' :
+      report.operation === 'release' ? 'Release preparation verifies exact-revision certification and artifact digests; it does not publish. The trusted GitHub release workflow signs and publishes.' :
         'This is a capability report, not evidence of a clean workload check or permission to act.',
       '',
       '| Capability | Status | Required for this request | Reason / tracking issue |',
@@ -188,6 +200,6 @@ if (command === 'local-remediate' && args.length >= 3 && args.length % 2 === 1 &
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> | governance --repository <owner/repo> --trusted-revision <SHA> --evidence <file> | collect-governance --repository <owner/repo> --trusted-revision <SHA> | bootstrap-governance --repository <owner/repo> --trusted-revision <SHA> --apply true | human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | release-artifact --mode <produce|verify> --trusted-revision <SHA> (--validation-evidence <file> --output-dir <dir> | --artifact-directory <dir>) | certify --repository <owner/repo> --pull-request <number> --trusted-revision <SHA> --evidence <bundle.json> --artifact-directory <dir> [--output <certificate.json>] | inventory | capability <name> [--required] | certify | validate [--contract <path>] [--evidence-output <file>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs release --mode prepare --repository <owner/repo> --source-revision <SHA> --actor <login> --trusted-repo <path> --certificate <json> --artifact-directory <dir> --output-directory <new-dir> [--certificate-run <id> --certificate-run-metadata <json> --producer-run <id> --producer-run-metadata <json>] | local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> | governance --repository <owner/repo> --trusted-revision <SHA> --evidence <file> | collect-governance --repository <owner/repo> --trusted-revision <SHA> | bootstrap-governance --repository <owner/repo> --trusted-revision <SHA> --apply true | human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | release-artifact --mode <produce|verify> --trusted-revision <SHA> (--validation-evidence <file> --output-dir <dir> | --artifact-directory <dir>) | certify --repository <owner/repo> --pull-request <number> --trusted-revision <SHA> --evidence <bundle.json> --artifact-directory <dir> [--output <certificate.json>] | inventory | capability <name> [--required] | certify | validate [--contract <path>] [--evidence-output <file>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }
