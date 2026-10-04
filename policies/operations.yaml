@@ -2,21 +2,39 @@ version: 1.0
 operations:
   observability:
     required_metrics:
-      - "lead_time"
-      - "deployment_frequency"
-      - "mttr"
-      - "change_failure_rate"
+      lead_time: unsupported
+      deployment_frequency: unsupported
+      mttr: supported_from_github_incident_lifecycle
+      change_failure_rate: unsupported
+    metrics:
+      uptime:
+        numerator: successful_health_probes
+        denominator: completed_health_probes
+        window: rolling_slo_window
+      mttr:
+        start_event: incident_opened
+        end_event: incident_recovered
+      unsupported:
+        - lead_time
+        - deployment_frequency
+        - change_failure_rate
+    events:
+      - health_probe_completed
+      - incident_opened
+      - incident_recovered
 
   health_checks:
     frequency_minutes: 5
     timeout_seconds: 10
     consecutive_failures_for_alert: 3
+    expected_status_codes: [200]
 
   SLOs:
+    window_days: 30
     target_mttr_minutes: 60
     target_uptime_percentage: 99.9
 
   incident_response:
-    auto_rollback_on_health_failure: true
-    alert_channel: "#ops-alerts"
-    trigger_remediation_agent: true
+    auto_rollback_on_health_failure: false
+    alert_channel: github-issues
+    trigger_remediation_agent: false

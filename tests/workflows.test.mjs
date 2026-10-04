@@ -11,7 +11,6 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const fixtures = [
   ['factory-ci.yml', 'validation-plane', 'contract-validation', true],
   ['factory-release.yml', 'verify-artifact', 'release-certification', true],
-  ['factory-health.yml', 'evaluate-health', 'health-monitoring', false],
 ];
 
 test('workflow fixtures cannot approve, push, publish, or hide unsupported required gates', () => {
@@ -33,6 +32,28 @@ test('workflow fixtures cannot approve, push, publish, or hide unsupported requi
       }
     }
   }
+});
+
+test('health workflow uses the supported five-minute cadence, restores state, and grants only monitoring permissions',()=>{
+  const workflow=parse(readFileSync(join(root,'.github/workflows/factory-health.yml'),'utf8'));
+  assert.deepEqual(Object.keys(workflow.on),['schedule','workflow_dispatch']);
+  assert.equal(workflow.on.schedule[0].cron,'*/5 * * * *');
+  assert.deepEqual(workflow.permissions,{contents:'read',actions:'read',issues:'write'});
+  assert.equal(workflow.concurrency['cancel-in-progress'],false);
+  const job=workflow.jobs['evaluate-health'];
+  assert.equal(job.if,"github.ref == 'refs/heads/main'");
+  assert.equal(job['timeout-minutes'],5);
+  const restore=job.steps.find(step=>step.name==='Restore preceding health state');
+  assert.ok(restore.run.includes('actions/runs/') && restore.run.includes('/artifacts?per_page=100'));
+  assert.ok(restore.run.includes('gh run download'));
+  const probe=job.steps.find(step=>step.name==='Probe configured workload endpoint and manage incident state');
+  assert.equal(probe.env.FACTORY_HEALTH_ENDPOINT,'${{ vars.FACTORY_HEALTH_ENDPOINT }}');
+  assert.equal(probe.run.includes('health-monitoring'),true);
+  const retained=job.steps.at(-1);
+  assert.equal(retained.if,'always()');
+  assert.equal(retained.with['retention-days'],90);
+  assert.ok(retained.with.path.includes('health-state.json'));
+  assert.ok(retained.with.path.includes('health-evidence.json'));
 });
 
 test('security CI scans the exact head with base policy and no write credentials', () => {

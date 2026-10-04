@@ -1,18 +1,21 @@
 # Runbook: Generic Health Check Failure
 
 ## Implementation status
-Automated monitoring and recovery are disabled. This is a future runbook template,
-not an executable recovery procedure. A human must verify deployment and migration
-compatibility before taking recovery action.
+The health workflow probes the configured HTTPS endpoint and opens a GitHub incident
+after the policy failure threshold. On recovery it records a notification and closes
+that issue. A human must verify deployment and migration compatibility before taking
+recovery action; automatic rollback and external paging are not implemented.
 
 ## Scenario
-The application's `health_endpoint` has returned a non-200 status code or timed out consecutively, breaching the threshold defined in `policies/operations.yaml`.
+The endpoint configured in repository Actions variable `FACTORY_HEALTH_ENDPOINT` has
+returned an unexpected status or timed out consecutively, breaching the threshold in
+`policies/operations.yaml`. GitHub scheduling is best effort and may delay checks.
 
 ## Automatic Remediation (Operations Agent)
-1. **Verify Metrics:** Check if this is an isolated incident or correlated with a spike in error rates or latency.
-2. **Determine Scope:** Identify if a recent deployment occurred within the last `auto_rollback_threshold.duration_minutes`.
-3. **Execute Rollback:** Once rollback is implemented and authorized, restore the previous compatible deployed artifact and verify recovery. Do not reset or rewrite the main branch; source corrections require a separate reviewed change.
-4. **Trigger Fix:** If not a deployment issue, dispatch a `trigger-remediation` event to the Coding Agent with the health endpoint logs.
+1. **Verify the endpoint:** Open the retained health evidence artifact and confirm status, response time, and consecutive-failure count.
+2. **Determine scope:** Review recent GitHub deployments and relevant workload changes; correlate them manually because change-failure metrics are not yet supported.
+3. **Recover safely:** Ticket #18 will define and authorize rollback. Until then, a human must select a compatible prior release and use the approved deployment process. Do not reset or rewrite the main branch; source corrections require a separate reviewed change.
+4. **Confirm recovery:** A passing probe records the recovery comment and closes the incident. If it remains open, inspect the workflow's GitHub issue permission and latest run evidence.
 
 ## Manual Escalation (Human SRE)
 If the Operations Agent fails to restore health within 15 minutes, human intervention is required:
