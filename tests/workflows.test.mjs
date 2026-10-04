@@ -10,25 +10,25 @@ import { parse } from 'yaml';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const fixtures = [
   ['factory-ci.yml', 'validation-plane', 'contract-validation', true],
-  ['factory-release.yml', 'release-plane', 'release-certification', true],
+  ['factory-release.yml', 'verify-artifact', 'release-certification', true],
   ['factory-health.yml', 'evaluate-health', 'health-monitoring', false],
 ];
 
 test('workflow fixtures cannot approve, push, publish, or hide unsupported required gates', () => {
   for (const [filename] of fixtures) {
     const workflow = parse(readFileSync(join(root, '.github/workflows', filename), 'utf8'));
-    assert.deepEqual(workflow.permissions, { contents: 'read' }, filename);
+    assert.deepEqual(workflow.permissions, filename === 'factory-release.yml' ? { contents: 'read', actions: 'read' } : { contents: 'read' }, filename);
     for (const job of Object.values(workflow.jobs)) {
       assert.equal(job.permissions, undefined, filename);
       assert.equal(job['continue-on-error'], undefined, filename);
       for (const step of job.steps) {
         assert.equal(step['continue-on-error'], undefined, filename);
         if (step.uses) {
-          assert.ok(['actions/checkout@v4', 'actions/setup-node@v4'].includes(step.uses), filename);
+          assert.ok(['actions/checkout@v4', 'actions/setup-node@v4', 'actions/upload-artifact@v4', 'actions/download-artifact@v4'].includes(step.uses), filename);
           if (step.uses === 'actions/checkout@v4') assert.equal(step.with['persist-credentials'], false, filename);
         } else {
-          assert.ok(/^(node scripts\/factory-validation\.mjs (inventory|profile|validate|certify|capability [a-z-]+(?: --required)?)|node scripts\/install-security-tools\.mjs|npm (ci --ignore-scripts|run typecheck|test))$/.test(step.run.trim()), filename);
-          assert.equal(step.if, undefined, filename);
+          assert.ok(/^(node scripts\/factory-validation\.mjs (inventory|profile|validate(?: --evidence-output [A-Za-z0-9_./-]+)?|certify|capability [a-z-]+(?: --required)?|release-artifact --mode (?:produce|verify) .+)|node scripts\/install-security-tools\.mjs|npm (ci --ignore-scripts|run typecheck|test))$/.test(step.run.trim()), filename);
+          if(filename!=='factory-release.yml') assert.equal(step.if, undefined, filename);
         }
       }
     }
@@ -64,6 +64,32 @@ test('dependency maintenance runs on schedule or manual dispatch and requests me
   assert.equal(merge.steps.some(step=>step.run?.includes('dependencies --mode merge')),true);
   assert.ok(merge.steps.every(step=>step.uses!=='actions/checkout@v4'||step.with['persist-credentials']===false));
   assert.ok(!JSON.stringify(workflow).includes('pull_request_target'));
+});
+
+test('CI uploads one source-bound build and the release consumer retrieves it without rebuilding',()=>{
+  const ci=parse(readFileSync(join(root,'.github/workflows/factory-ci.yml'),'utf8'));
+  assert.deepEqual(ci.permissions,{contents:'read'});
+  const job=ci.jobs['validation-plane'],validation=job.steps.find(step=>step.run?.includes('validate --evidence-output'));
+  assert.equal(validation.run,'node scripts/factory-validation.mjs validate --evidence-output tmp/factory-validation.json');
+  const producer=job.steps.find(step=>step.run?.includes('release-artifact --mode produce'));
+  assert.equal(producer.env.TRUSTED_REVISION,'${{ github.sha }}');
+  assert.ok(producer.run.includes('--validation-evidence tmp/factory-validation.json'));
+  const upload=job.steps.at(-1);assert.equal(upload.uses,'actions/upload-artifact@v4');
+  assert.equal(upload.with.name,'factory-reference-workload-${{ github.sha }}-${{ github.run_id }}');
+  assert.equal(upload.with.path,'tmp/release-artifact');assert.equal(upload.with['retention-days'],90);
+  const release=parse(readFileSync(join(root,'.github/workflows/factory-release.yml'),'utf8'));
+  assert.deepEqual(release.permissions,{contents:'read',actions:'read'});
+  assert.deepEqual(release.on.workflow_run.workflows,['Factory Continuous Integration']);
+  assert.deepEqual(release.on.workflow_run.branches,['main']);
+  assert.ok(release.on.workflow_dispatch.inputs.producer_run_id.required);
+  const consumer=release.jobs['verify-artifact'];
+  assert.match(consumer.if,/workflow_run\.event == 'push'/);assert.match(consumer.if,/head_branch == 'main'/);
+  assert.equal(consumer.steps[0].with.ref,'main');assert.equal(consumer.steps[0].with['persist-credentials'],false);
+  const download=consumer.steps.find(step=>step.uses==='actions/download-artifact@v4');
+  assert.equal(download.with['run-id'],'${{ env.PRODUCER_RUN_ID }}');assert.equal(download.with['github-token'],'${{ github.token }}');
+  assert.equal(download.with.name,'factory-reference-workload-${{ env.SOURCE_REVISION }}-${{ env.PRODUCER_RUN_ID }}');
+  const verify=consumer.steps.at(-1);assert.equal(verify.run,'node scripts/factory-validation.mjs release-artifact --mode verify --trusted-revision "$SOURCE_REVISION" --artifact-directory tmp/downloaded-release-artifact');
+  assert.ok(!JSON.stringify(release).includes('npm run build'));
 });
 
 test('SAST CI evaluates exact-head native analyses with read-only security permissions',()=>{
@@ -143,7 +169,7 @@ for (const [filename, jobName, capability, required] of fixtures) {
   test(`${filename} ${filename === 'factory-ci.yml' ? 'executes the reference workload' : required ? 'blocks unsupported required gates' : 'reports optional automation disabled'}`, () => {
     const workflow = parse(readFileSync(join(root, '.github/workflows', filename), 'utf8'));
     const job = workflow.jobs[jobName];
-    assert.equal(job.if, undefined, 'A supported event must not silently skip reporting');
+    if (filename !== 'factory-release.yml') assert.equal(job.if, undefined, 'A supported event must not silently skip reporting');
     if (filename === 'factory-remediation.yml') {
       assert.deepEqual(Object.keys(workflow.on), ['workflow_dispatch']);
     }
@@ -151,8 +177,9 @@ for (const [filename, jobName, capability, required] of fixtures) {
     const summary = join(directory, 'summary.md');
     try {
       const outcomes = [];
-      for (const step of job.steps.filter((entry) => entry.run)) {
+      for (const step of (filename === 'factory-release.yml' ? job.steps.filter(entry=>entry.run).slice(-1) : job.steps.filter((entry) => entry.run))) {
         if (step.run === 'npm ci --ignore-scripts') continue; // Tool installation is exercised by CI; the fixture host already installed them.
+        if (step.run.includes('release-artifact --mode produce')) continue; // Artifact production is covered through its public CLI fixture.
         const [runtime, script, ...args] = step.run.trim().split(/\s+/);
         assert.equal(runtime, 'node');
         const result = spawnSync(process.execPath, [join(root, script), ...args], {
@@ -167,15 +194,19 @@ for (const [filename, jobName, capability, required] of fixtures) {
       assert.ok(outcomes.length > 0, 'Workflow must actually invoke a gate');
       const outcome = outcomes.at(-1);
       const executesContract = filename === 'factory-ci.yml';
-      assert.equal(outcome.status, required && !executesContract ? 1 : 0);
+      assert.equal(outcome.status, filename === 'factory-release.yml' || required && !executesContract ? 1 : 0);
       const report = JSON.parse(outcome.stdout);
-      assert.equal(report.outcome, executesContract ? 'passed' : required ? 'blocked' : capability === 'policy-review' ? 'not-run' : 'unsupported');
+      assert.equal(report.outcome, filename === 'factory-release.yml' || required && !executesContract ? 'blocked' : executesContract ? 'passed' : capability === 'policy-review' ? 'not-run' : 'unsupported');
       if (executesContract) {
         assert.equal(report.operation, 'validate');
         assert.deepEqual(report.results.map((gate) => gate.capability), ['install', 'validate', 'test', 'build']);
         assert.ok(report.results.every((gate) => gate.status === 'passed'));
         const runtimeStep = job.steps.find((step) => step.name === 'Set up selected workload runtime');
         assert.equal(runtimeStep.with['node-version'], '${{ steps.profile.outputs.node_version }}');
+      } else if(filename==='factory-release.yml') {
+        assert.equal(report.operation,'release-artifact');
+        assert.equal(report.results[0].capability,'traceable-build-artifacts');
+        assert.equal(report.results[0].status,'error');
       } else {
         assert.ok(report.results.some((gate) => gate.capability === capability && gate.required === required && gate.status === (capability === 'policy-review' ? 'not-run' : 'unsupported')));
       }

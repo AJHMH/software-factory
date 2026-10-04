@@ -18,6 +18,13 @@ dependencies:
     # Do not auto-merge any dependency that introduces known vulnerabilities above this severity
     max_severity_allowed: "low"
 
+  artifact:
+    sbom_format: "SPDX-2.3"
+    dependency_registry: "https://registry.npmjs.org/"
+    lockfile_version: 3
+    source_lockfile: "examples/reference-workload/package-lock.json"
+    include_development_dependencies: true
+
   exemptions:
     # High-risk frameworks that always require human review even for minor bumps
     require_human_always:

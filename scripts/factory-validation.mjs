@@ -1,4 +1,5 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 // Execution and scoped policy evaluation are available; hosted authorization and release evidence follow later.
 /** @type {Record<string, { reason: string, trackingIssue: number, requiredForRelease: boolean, available?: boolean }>} */
@@ -94,6 +95,11 @@ if (command === 'dependencies' && args.length >= 3 && args.length % 2 === 1 && a
  const report=options['--mode']==='update'?await (await import('./dependency-updater.mjs')).updateDependencies(options):await (await import('./dependency-maintenance.mjs')).maintainDependencies(options);publish(report);process.exit(report.outcome==='passed'?0:1);
 }
 
+if (command === 'release-artifact' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--mode','--trusted-repo','--trusted-revision','--validation-evidence','--output-dir','--artifact-directory'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
+  const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
+  const report=await (await import('./release-artifact.mjs')).releaseArtifact(options);publish(report);process.exit(report.outcome==='passed'?0:1);
+}
+
 /** @param {{ operation: string, outcome: string, results: Array<{ capability: string, status: string, required: boolean, reason: string, trackingIssue?: number }> }} report */
 function publish(report) {
   if (process.env.GITHUB_STEP_SUMMARY) {
@@ -145,9 +151,12 @@ if (command === 'local-remediate' && args.length >= 3 && args.length % 2 === 1 &
   publish(report);
   process.exitCode = report.outcome === 'passed' ? 0 : 1;
 } else if ((command === 'validate' || command === 'profile') &&
-  (args.length === 1 || (args.length === 3 && args[1] === '--contract' && args[2]))) {
+  (args.length === 1 || (args.length === 3 && ((args[1] === '--contract' || command === 'validate' && args[1] === '--evidence-output') && args[2]) || args.length === 5 && command === 'validate' && args[1] === '--contract' && args[2] && args[3] === '--evidence-output' && args[4]))) {
   const { runContract } = await import('./contract-execution.mjs');
-  const report = await runContract(args[2] ?? 'factory-contract.yaml', command === 'profile');
+  const contractIndex=args.indexOf('--contract'),contractPath=contractIndex<0?'factory-contract.yaml':args[contractIndex+1];
+  const report = await runContract(contractPath, command === 'profile');
+  const evidenceIndex=args.indexOf('--evidence-output');
+  if(evidenceIndex>=0) {const evidencePath=resolve(args[evidenceIndex+1]);mkdirSync(dirname(evidencePath),{recursive:true});if(existsSync(evidencePath)){const prior=lstatSync(evidencePath);if(!prior.isFile()||prior.isSymbolicLink()||prior.nlink!==1)throw new Error('Validation evidence output must be a regular file.');}writeFileSync(evidencePath,JSON.stringify({schemaVersion:1,...report},null,2)+'\n',{flag:existsSync(evidencePath)?'w':'wx'});}
   publish(report);
   if (command === 'profile' && report.outcome === 'passed' && process.env.GITHUB_OUTPUT && 'profile' in report) {
     appendFileSync(process.env.GITHUB_OUTPUT, `node_version=${report.profile.nodeVersion}\n`);
@@ -172,6 +181,6 @@ if (command === 'local-remediate' && args.length >= 3 && args.length % 2 === 1 &
   });
   process.exitCode = required ? 1 : 0;
 } else {
-  console.error('Usage: factory-validation.mjs local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> | governance --repository <owner/repo> --trusted-revision <SHA> --evidence <file> | collect-governance --repository <owner/repo> --trusted-revision <SHA> | bootstrap-governance --repository <owner/repo> --trusted-revision <SHA> --apply true | human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | inventory | capability <name> [--required] | certify | validate [--contract <path>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
+  console.error('Usage: factory-validation.mjs local-remediate --mode <prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --source-branch <feat/branch> --source-revision <SHA> --path <file.json> --request-id <digits> --state-dir <external-dir> | remediate --mode <authorize|prepare|publish> --repository <owner/repo> --trusted-revision <SHA> --repository-path <path> --state-dir <external-dir> | propose-change --trusted-revision <SHA> --repository-path <path> --proposal <file> --state-dir <external-dir> --scope-id <id> --actor <identity> | prune-agent-evidence --trusted-revision <SHA> --state-dir <external-dir> | governance --repository <owner/repo> --trusted-revision <SHA> --evidence <file> | collect-governance --repository <owner/repo> --trusted-revision <SHA> | bootstrap-governance --repository <owner/repo> --trusted-revision <SHA> --apply true | human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> --evidence <file> [--coverage-evidence <file>] | collect-reviews --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo> --pull-request <number> [--coverage-evidence github] [--output <file>] | release-artifact --mode <produce|verify> --trusted-revision <SHA> (--validation-evidence <file> --output-dir <dir> | --artifact-directory <dir>) | inventory | capability <name> [--required] | certify | validate [--contract <path>] [--evidence-output <file>] | profile [--contract <path>] | sast --trusted-revision <SHA> --evidence <file> | collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <exact-ref> [--output <file>] | scan-security --trusted-revision <SHA> [--tools-dir <path>] [--output <file>] | security --trusted-revision <SHA> --evidence <file> | measure-coverage --trusted-revision <SHA> --base-revision <SHA> [--output <file>] | coverage --trusted-revision <SHA> --base-revision <SHA> --evidence <file> | policy --trusted-revision <SHA> [--trusted-repo <path>] [--contract <path>] [--overrides <path>]');
   process.exitCode = 2;
 }
