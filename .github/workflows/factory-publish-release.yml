@@ -40,7 +40,7 @@ jobs:
       PRODUCER_RUN_ID: ${{ inputs.producer_run_id }}
     steps:
       - name: Checkout trusted main history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0

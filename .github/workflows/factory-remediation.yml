@@ -43,7 +43,7 @@ jobs:
       source_sha: ${{ steps.authority.outputs.source_sha }}
       trusted_sha: ${{ steps.authority.outputs.trusted_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false

@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 8
     steps:
       - name: Checkout exact source revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0

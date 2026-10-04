@@ -17,13 +17,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout trusted evaluator and policy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: trusted
           persist-credentials: false
       - name: Checkout candidate as data only
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
@@ -47,13 +47,13 @@ jobs:
     timeout-minutes: 8
     steps:
       - name: Checkout trusted evaluator and policy
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: trusted
           persist-credentials: false
       - name: Checkout candidate as data only
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
