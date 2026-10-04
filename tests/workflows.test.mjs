@@ -49,6 +49,8 @@ test('security CI scans the exact head with base policy and no write credentials
   assert.ok(job.steps.every(step=>!step.if && !step['continue-on-error'] && !step.run?.includes('${{')));
   const ci=parse(readFileSync(join(root,'.github/workflows/factory-ci.yml'),'utf8'));
   assert.equal(ci.jobs['factory-template-tests'].steps.at(-1).env.FACTORY_SECURITY_INTEGRATION,'1');
+  const testCheckout=ci.jobs['factory-template-tests'].steps.find(step=>step.uses==='actions/checkout@v4');
+  assert.equal(testCheckout.with['fetch-depth'],0,'release certification fixtures require parent commits');
 });
 
 test('dependency maintenance runs on schedule or manual dispatch and requests merges only with hosted permissions',()=>{
