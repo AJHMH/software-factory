@@ -17,6 +17,7 @@ administrator's existing local GitHub session:
 | Remove required_signatures in the integration ruleset | blocked with the exact missing-signature remediation |
 | Restore original ruleset in finally | passed, no drift |
 | Repeat bootstrap with unrelated tag ruleset `24435503` | passed; unrelated ruleset response unchanged exactly |
+| Direct signed push to integration main without a reviewed PR | rejected by GitHub with GH013; PR required and all eight required checks expected |
 
 Production rulesets were not weakened. The integration ruleset remains active
 and restored. It requires all eight named checks and one current human approval.
@@ -36,4 +37,10 @@ Trusted base checkout prevents candidate evaluator execution in the trusted job,
 but check-name spoof prevention and authenticated retained evidence still need
 a required-workflow entitlement or separately scoped trusted publisher. Fork
 permission and runtime rejection probes are not claimed as verified by these
-configuration checks. See [operator guide](repository-governance.md).
+configuration checks beyond the direct-push denial above. See [operator guide](repository-governance.md).
+
+PR #28 landed the protection tools and trusted base human-review workflow as
+`04993026f68910c6ad3eeab6aac5d5d1227d9d9e`. This documentation follow-up exercises
+that workflow on a subsequent proposal before production activation. The owner
+must approve this proposal's exact head; the agent then reruns the trusted job
+to verify positive review evidence without executing candidate evaluator code.
