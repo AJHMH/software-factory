@@ -50,9 +50,9 @@ export async function remediate(options) {
   if(!permission || permission.user?.login!==actor || permission.user?.type!=='User' || !['admin','maintain','write'].includes(permission.permission)) throw new Error('permission');
   const authority=await api(`${prefix}/git/ref/heads/main`,readToken);if(authority?.object?.sha!==trusted) throw new Error('stale authority');
   let request,id;
-  if(kind==='workflow_dispatch' || kind==='repository_dispatch') {
+  if(kind==='workflow_dispatch' || kind==='repository_dispatch' || kind==='local_manual') {
    if(kind==='repository_dispatch' && event.action!=='factory-remediate') throw new Error('dispatch');
-   request=kind==='workflow_dispatch'?event.inputs:event.client_payload;id=process.env.GITHUB_RUN_ID;
+   request=kind==='repository_dispatch'?event.client_payload:event.inputs;id=process.env.GITHUB_RUN_ID;
   } else if(kind==='issue_comment') {
    if(event.action!=='created' || !Number.isSafeInteger(event.comment?.id) || !event.issue?.pull_request) throw new Error('comment');
    const comment=await api(`${prefix}/issues/comments/${event.comment.id}`,readToken);
@@ -71,9 +71,15 @@ export async function remediate(options) {
   const content=git(sourceRepo,['show',`${request.source_sha}:${request.path}`]);if(Buffer.byteLength(content)>65536 || content.includes('\u0000') || content.includes('\ufffd')) throw new Error('content');
   const formatted=formatJson(content);if(formatted===content) {reason='No supported JSON formatting fix exists; no branch or PR created.';throw new Error('no-op');}
   const scope='remediation-'+hash(`${repo}:${kind}:${id}`).slice(0,52),branch='feat/factory-remediation-'+hash(`${repo}:${kind}:${id}`).slice(0,32),requestDigest=hash(JSON.stringify(request));
-  evidence={actor,event:kind,eventId:id,repository:repo,revision:request.source_sha,trustedRevision:trusted,policyDigest:hash(policySource),requestDigest,branch,validation:'JSON parse and deterministic formatting at the exact named revision; full PR gates required before merge'};
+  const proposalSource=JSON.stringify({version:'1.0',adapter:'fixture',actions:[{tool:'write_file',path:request.path,content:formatted}]});
+  evidence={actor,event:kind,eventId:id,repository:repo,revision:request.source_sha,trustedRevision:trusted,policyDigest:hash(policySource),requestDigest,proposalDigest:hash(proposalSource),branch,validation:'JSON parse and deterministic formatting at the exact named revision; full PR gates required before merge'};
   // Every replay reauthorizes caller, policy, and exact source revision before looking up durable remote evidence.
-  const prior=await api(`${prefix}/git/ref/heads/${branch}`,readToken);
+  let prior=await api(`${prefix}/git/ref/heads/${branch}`,readToken);
+  if(!prior) {
+   const published=await api(`${prefix}/pulls?state=all&head=${repo.split('/')[0]}:${branch}&base=main&per_page=100`,readToken);
+   if(!Array.isArray(published) || published.length>1) throw new Error('ambiguous replay');
+   if(published.length===1) {if(!/^[a-f0-9]{40}$/.test(published[0].head?.sha??'')) throw new Error('replay head');prior={object:{sha:published[0].head.sha}};}
+  }
   if(prior) {
    const signature=await api(`${prefix}/commits/${prior.object.sha}`,readToken);
    if(signature?.commit?.verification?.verified!==true) throw new Error('unverified replay');
@@ -89,7 +95,7 @@ export async function remediate(options) {
   }
   if(Number(process.env.GITHUB_RUN_ATTEMPT??'1')!==1) {reason='Hosted rerun has no durable published scope; operator recovery required before another runner reservation.';throw new Error('rerun');}
   // Fixed data-only adapter, not arbitrary issue instructions or vendor-generated commands.
-  temporary=mkdtempSync(join(tmpdir(),'factory-remediation-'));const proposal=join(temporary,'proposal.json');writeFileSync(proposal,JSON.stringify({version:'1.0',adapter:'fixture',actions:[{tool:'write_file',path:request.path,content:formatted}]}),{mode:0o600});
+  temporary=mkdtempSync(join(tmpdir(),'factory-remediation-'));const proposal=join(temporary,'proposal.json');writeFileSync(proposal,proposalSource,{mode:0o600});
   const runner=await proposeChange({...options,'--proposal':proposal,'--scope-id':scope,'--actor':actor??''});evidence.runner=runner;
   if(runner.outcome!=='passed' || !('workspace' in runner)) {reason='Bounded runner denied the proposed fix.';throw new Error('runner');}
   if(readFileSync(join(/** @type {string} */(runner.workspace),request.path),'utf8')!==formatted) throw new Error('validation');

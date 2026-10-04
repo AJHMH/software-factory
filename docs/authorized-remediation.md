@@ -57,7 +57,7 @@ is synthetic accounting, not vendor billing. No unknown-cost vendor is enabled.
 Credentials are separate: `FACTORY_GITHUB_TOKEN` reads authorization evidence,
 `FACTORY_PUSH_TOKEN` has Contents write, and `FACTORY_PR_TOKEN` is the dedicated
 App installation with Contents read and PR write. A read token cannot publish.
-The workflow uses its job token for branch writes and the existing App for the PR;
+The local publisher uses the authenticated human token for branch writes and the existing App for the PR;
 the App needs no permission expansion. An installation token triggers normal PR
 checks; a job token used to author the PR would suppress those event chains.
 
@@ -88,8 +88,7 @@ even when the PR is closed. Changed or ambiguous evidence fails closed.
 
 Partially published branches require operator recovery. A hosted rerun with no
 durable published scope stops before reservation: an ephemeral runner cannot prove
-that an earlier attempt spent nothing. Do not delete a published branch and replay
-its event to reset spending. Deliberately submitted new requests are separate
+that an earlier attempt spent nothing. A deleted fix branch is resolved through its unique published PR head and exact commit evidence; it cannot create a second PR. A deleted source branch makes the request stale and stops replay. Deliberately submitted new requests are separate
 authorized scopes. No publication retry loop exists.
 
 Reports contain caller, event ID, source/trusted/fix SHAs, policy/request digests,
@@ -102,35 +101,32 @@ and retention settings; commits and PRs persist as durable replay evidence. Rele
 attestation remains #14.
 
 API calls have 15-second timeouts and 1 MiB response limits; operation counts are
-fixed. Authorization jobs have five-minute limits and publication ten minutes.
+fixed. Hosted authorization jobs have five-minute limits; the local publication operation has a fixed number of timed API calls.
 The runner retains its independent trusted 60-second, 20-action, 64-KiB, $2
 synthetic task limits. Interrupted publication is blocked and must be inspected.
 
-## Protected hosted activation pending
+## Local publication selected
 
-The implementation ships inactive: `FACTORY_REMEDIATION_ENABLED` is unset.
-Before activation, create environment `factory-remediation`, restrict deployments
-to main, and require the owner's environment review. Store `FACTORY_APP_PRIVATE_KEY`
-as an environment secret, never a repository secret. The PEM remains outside the
-checkout. Keep existing repository scope and App grants. Enable the repository
-variable only after verifying protections and landing the reviewed workflow.
-A same-account manual caller may supply environment review; preventing self-review
-would block this single-developer workflow. Environment review and PR review are
-separate approvals.
+GitHub rejected the required environment-review rule on the current private
+GitHub Team repository. The owner selected the [local human-gated publisher](local-remediation.md).
+Use `local-remediate` to authenticate the local human, prepare a bounded proposal,
+and explicitly approve its digest before the external App key is loaded. The App
+key stays outside GitHub. Hosted workflows only authorize requests; their former
+publisher job, write permission, environment reference, and secret reference are
+removed. No activation variable or hosted key upload is needed.
 
-The workflow does not provision or attest environment configuration. GitHub can
-auto-create a missing environment without review, so verify configuration before
-enabling the variable. Missing credentials fail closed. Administrators can alter
-workflow/environment policy; immutable workflow trust and release attestation
-remain #9/#14 limitations.
+The prior protected-hosted activation design was not enabled. GitHub's empty
+unprotected environment was removed, no secret uploaded, and no reviewer
+requirement bypassed. The local operator gate and the subsequent GitHub PR review
+are separate; neither constitutes release attestation.
 
-Local public CLI tests use a GitHub API boundary fixture, real Git repositories,
-and Windows ACLs. CI repeats authorized, denied, and replay cases on hosted Linux.
-These fixtures do not prove live event transport, deployed token permissions,
-signed GraphQL commits, or environment enforcement. Keep #11 open until the
-reviewed workflow is on main, protected credentials are configured, and live
-authorized/denied requests prove one real App PR, zero abusive writes, exact-head
-checks, and the human review/rerun mechanism.
+Public CLI tests cover local preparation, exact-digest denial, external-key scope,
+signed App PR publication and credential-free replay through a GitHub API boundary
+fixture. Live hosted manual and repository dispatch authorization passed; hostile
+input failed before publication. Keep #11 open until the local implementation's
+real signed fix PR, denied requests, durable replay, exact-head checks, and human
+review/rerun evidence are recorded and its implementation is approved and landed.
+
 
 References: [GitHub events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows),
 [GraphQL commit API](https://docs.github.com/en/graphql/reference/commits),
@@ -142,5 +138,4 @@ Live integration evidence: a temporary branch in the isolated governance integra
 repository produced signed commit 40e509c21451611d777f11681ce8ebe51eecc774 through
 GraphQL. Repeating its original expected-head mutation returned STALE_DATA without
 a second commit. The temporary branch was deleted; main protections were unchanged.
-The owner token was used for this test; deployed workflow-token behavior still
-requires the protected hosted fixture.
+The owner token was used for this test. Live local publisher evidence is recorded on ticket #11; no hosted writer-token behavior is claimed.

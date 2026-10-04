@@ -31,6 +31,11 @@ PR write also exposes review APIs, but bot reviews cannot satisfy the factory's
 human gate. Contents read prevents this token from pushing or merging changes.
 Local signed branch pushes continue through the existing Git identity.
 
+Ticket #11 also supports an explicitly gated local remediation publisher; see
+[local remediation](local-remediation.md). It uses the same external App key and
+PR-only installation permissions, with signed human-token branch writes. Hosted
+remediation only authorizes requests and receives no private key or write token.
+
 Record the App ID, installation ID, and bot slug. Generate the App private key
 in GitHub and keep its PEM outside the repository in a folder accessible only
 to your Windows account. Do not paste it into chat, commit it, or put it in an

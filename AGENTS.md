@@ -21,3 +21,9 @@ in `docs/factory-github-app.md`; attach each created PR to the Codex task.
 Never submit human approvals as an agent or substitute chat approval for a current
 GitHub review. Missing App credentials block proposal creation; do not fall back to
 an owner-authored PR or change required checks to get around that blocker.
+
+For actual remediation PRs, use the local `local-remediate` public interface and
+the operator gate documented in `docs/local-remediation.md`. Prepare and inspect
+the proposal before publication; supply `--approve true` and its exact digest only
+for a human-authorized request. Keep the App PEM outside GitHub and the repository.
+This local publication gate never supplies the required GitHub PR approval.
