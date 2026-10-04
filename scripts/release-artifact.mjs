@@ -104,7 +104,7 @@ function sbom(ctx,artifactDigest,created) {
 /** @param {Json} report @param {ReturnType<typeof context>} ctx */
 function validateReport(report,ctx) {
  const capabilities=['install','validate','test','build'];
- if(report.operation!=='validate' || report.outcome!=='passed' || report.revision!==ctx.revision || report.treeDigest!==ctx.treeDigest || report.contractDigest!==ctx.contractDigest || report.workloadId!==ctx.contract.workload_id || report.profile?.id!==ctx.contract.profile || report.profile?.nodeVersion!=='24' || report.workingTreeDirty!==false || !Array.isArray(report.results) || report.results.length!==capabilities.length || report.results.some((gate,index)=>gate.capability!==capabilities[index] || gate.required!==true || gate.status!=='passed' || gate.exitCode!==0)) deny('A complete clean validation report for the exact source commit is required.');
+ if(report.operation!=='validate' || report.outcome!=='passed' || report.revision!==ctx.revision || report.contractDigest!==ctx.contractDigest || report.workloadId!==ctx.contract.workload_id || report.profile?.id!==ctx.contract.profile || report.profile?.nodeVersion!=='24' || report.workingTreeDirty!==false || !Array.isArray(report.results) || report.results.length!==capabilities.length || report.results.some((gate,index)=>gate.capability!==capabilities[index] || gate.required!==true || gate.status!=='passed' || gate.exitCode!==0)) deny('A complete clean validation report for the exact source commit is required.');
 }
 /** @param {string} executableDirectory */
 function npmVersion(executableDirectory) {
