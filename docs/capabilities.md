@@ -11,6 +11,9 @@ it is not a Governed Automation readiness claim.
 The public interface is `node scripts/factory-validation.mjs`:
 
 - `inventory` reports all capabilities and exits 0; it does not approve delivery.
+- `propose-change` executes a controlled bounded fixture proposal in a private
+  workspace; `prune-agent-evidence` expires its evidence without resetting budgets.
+  See [bounded proposals](bounded-agent-proposals.md) for required authorization inputs.
 - `capability <name>` reports metadata and exits 0. Available execution reports
   not-run; unsupported capabilities report unsupported. No gate has passed.
 - `capability <name> --required` exits 1 without executed evidence.
@@ -56,6 +59,7 @@ summary. A successful reporting job is never a passing workload check.
 | sast-policy | available; actual native analysis/evaluation required | yes | #7 implemented; #9/#14: governance and certification |
 | human-review | available; current independent approval evidence required | yes | #8 implemented; #9: trusted workflow and merge boundary |
 | repository-governance | available; live configuration inspection required | yes | #9: protection bootstrap and drift; see entitlement limits |
+| bounded-agent-proposal | available; controlled fixture only | no | #10: audited broker; #11: remediation integration |
 | release-certification | unsupported | yes | #14: Exact-revision certification |
 | agent-remediation | unsupported; writes disabled | no | #10/#11: Bounded, authorized remediation |
 | dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |
