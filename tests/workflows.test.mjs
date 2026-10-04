@@ -173,15 +173,12 @@ for (const [filename, jobName, capability, required] of fixtures) {
 }
 
 
-test('remediation separates read-only authorization from a protected, explicitly activated publisher',()=>{
+test('hosted remediation authorizes requests with no publisher, secret, or write permission',()=>{
  const workflow=parse(readFileSync(join(root,'.github/workflows/factory-remediation.yml'),'utf8'));
  assert.deepEqual(workflow.permissions,{contents:'read','pull-requests':'read'});
  assert.deepEqual(Object.keys(workflow.on),['issue_comment','repository_dispatch','workflow_dispatch']);
- assert.equal(workflow.concurrency['cancel-in-progress'],false);
- const auth=workflow.jobs.authorize,publish=workflow.jobs.publish;
- assert.equal(auth.permissions,undefined);assert.match(auth.if,/refs\/heads\/main/);assert.equal(publish.needs,'authorize');assert.equal(publish.environment,'factory-remediation');assert.equal(publish.if,"vars.FACTORY_REMEDIATION_ENABLED == 'true'");assert.deepEqual(publish.permissions,{contents:'write','pull-requests':'read'});assert.equal(publish['timeout-minutes'],10);
- for(const job of [auth,publish]) for(const step of job.steps) {assert.equal(step['continue-on-error'],undefined);assert.ok(!step.run?.includes('${{'));if(step.uses==='actions/checkout@v4') assert.equal(step.with['persist-credentials'],false);}
- assert.ok(auth.steps.every(s=>!JSON.stringify(s).includes('secrets.')));
- const app=publish.steps.find(s=>s.id==='app');assert.equal(app.with['permission-contents'],'read');assert.equal(app.with['permission-pull-requests'],'write');assert.match(app.uses,/@[a-f0-9]{40}$/);
- const command=publish.steps.at(-1);assert.equal(command['working-directory'],'trusted');assert.ok(command.run.includes('remediate --mode publish'));assert.ok(!command.run.includes('merge'));
+ assert.equal(workflow.concurrency['cancel-in-progress'],false);assert.deepEqual(Object.keys(workflow.jobs),['authorize']);
+ const auth=workflow.jobs.authorize;assert.equal(auth.permissions,undefined);assert.match(auth.if,/refs\/heads\/main/);assert.equal(auth.environment,undefined);
+ for(const step of auth.steps) {assert.equal(step['continue-on-error'],undefined);assert.ok(!step.run?.includes('${{'));if(step.uses==='actions/checkout@v4') assert.equal(step.with['persist-credentials'],false);}
+ assert.ok(!JSON.stringify(workflow).includes('secrets.'));assert.ok(auth.steps.at(-1).run.includes('remediate --mode authorize'));
 });

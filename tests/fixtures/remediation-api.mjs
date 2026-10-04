@@ -4,9 +4,13 @@ const data=JSON.parse(readFileSync(filename,'utf8'));
 globalThis.fetch=async(url,options={})=>{
  const u=new URL(url),p=u.pathname,request=options.body?JSON.parse(options.body):{};let body;
  if(p.endsWith('/permission')) body={permission:data.permission,user:{login:data.actor,type:'User'}};
+ else if(p==='/user') body={login:data.actor,type:'User'};
+ else if(p==='/app') body={id:5180250,slug:'factory'};
+ else if(p.endsWith('/access_tokens')) body={token:'temporary-app-fixture',permissions:{contents:'read',pull_requests:'write'}};
+ else if(p==='/installation/token') return new Response(null,{status:204});
  else if(p.endsWith('/git/ref/heads/main')) body={object:{sha:data.sha}};
  else if(p.includes('/git/ref/heads/feat/source')) body={object:{sha:data.source_sha}};
- else if(p.includes('/git/ref/heads/feat/factory-remediation-')) {if(!data.fixed) return new Response('{}',{status:404});body={object:{sha:'e'.repeat(40)}};}
+ else if(p.includes('/git/ref/heads/feat/factory-remediation-')) {if(!data.fixed || data.deletedBranch) return new Response('{}',{status:404});body={object:{sha:'e'.repeat(40)}};}
  else if(p==='/graphql') {const input=request.variables.input;if(!input.branch.branchName || input.branch.refName) return new Response(JSON.stringify({errors:[{message:'Invalid branch input'}]}),{status:200});data.fixed=true;data.formatted=Buffer.from(input.fileChanges.additions[0].contents,'base64').toString('utf8');data.message=input.message.headline;body={data:{createCommitOnBranch:{commit:{oid:'e'.repeat(40),signature:{isValid:data.signature!==false}}}}};}
  else if(p.includes('/contents/')) {const content=u.searchParams.get('ref')==='e'.repeat(40)?data.formatted:data.content;body={type:'file',encoding:'base64',size:Buffer.byteLength(content),content:Buffer.from(content).toString('base64'),sha:'b'.repeat(40)};}
  else if(p==='/installation/repositories') body={repositories:[{full_name:'org/repo'}]};

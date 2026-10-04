@@ -4,6 +4,8 @@ import {mkdirSync,mkdtempSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import test from 'node:test';
+import {generateKeyPairSync} from 'node:crypto';
+import {tmpdir} from 'node:os';
 const root=fileURLToPath(new URL('../',import.meta.url));
 function fixture(t) {
   mkdirSync(join(root,'tmp'),{recursive:true});const dir=mkdtempSync(join(root,'tmp/remediation-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const repo=join(dir,'repo');mkdirSync(join(repo,'policies'),{recursive:true});mkdirSync(join(repo,'src'));
@@ -13,7 +15,8 @@ function fixture(t) {
   const event={sender:{login:'owner',type:'User'},repository:{full_name:'org/repo'},inputs:{source_branch:'feat/source',source_sha:sha,path:'src/data.json',operation:'format-json'}};
   const api={sha,source_sha:sha,content:'{"value":1}\n',permission:'write',actor:'owner',app_actor:'factory[bot]'};
   const run=(mode='prepare',name='workflow_dispatch',host={})=>{writeFileSync(join(dir,'event.json'),JSON.stringify(event));writeFileSync(join(dir,'api.json'),JSON.stringify(api));const r=spawnSync(process.execPath,['--import',pathToFileURL(join(root,'tests/fixtures/remediation-api.mjs')).href,join(root,'scripts/factory-validation.mjs'),'remediate','--trusted-repo',repo,'--trusted-revision',sha,'--repository-path',repo,'--repository','org/repo','--state-dir',join(dir,'state'),'--mode',mode],{encoding:'utf8',env:{...process.env,GITHUB_EVENT_NAME:name,GITHUB_EVENT_PATH:join(dir,'event.json'),GITHUB_ACTOR:'owner',GITHUB_RUN_ID:'123',GITHUB_RUN_ATTEMPT:'1',GITHUB_REF:'refs/heads/main',FACTORY_GITHUB_TOKEN:'read-fixture',FACTORY_PUSH_TOKEN:'write-fixture',FACTORY_PR_TOKEN:'app-fixture',FACTORY_TEST_API:join(dir,'api.json'),...host}});return {...r,report:r.stdout?JSON.parse(r.stdout):null};};
-  return {dir,repo,sha,event,api,run,git};
+  const runLocal=(mode='prepare',extra=[])=>{writeFileSync(join(dir,'api.json'),JSON.stringify(api));const r=spawnSync(process.execPath,['--import',pathToFileURL(join(root,'tests/fixtures/remediation-api.mjs')).href,join(root,'scripts/factory-validation.mjs'),'local-remediate','--trusted-repo',repo,'--trusted-revision',sha,'--repository-path',repo,'--repository','org/repo','--state-dir',join(dir,'state'),'--mode',mode,'--source-branch','feat/source','--source-revision',api.source_sha,'--path','src/data.json','--request-id','789',...extra],{encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'read-fixture',FACTORY_TEST_API:join(dir,'api.json')}});return {...r,report:r.stdout?JSON.parse(r.stdout):null};};
+  return {dir,repo,sha,event,api,run,runLocal,git};
 }
 test('authorized exact-revision request prepares a genuine bounded JSON formatting fix without changing its source',t=>{
   const f=fixture(t),r=f.run();assert.equal(r.status,0,r.stdout+r.stderr);assert.equal(r.report.outcome,'passed');assert.equal(r.report.revision,f.sha);assert.equal(r.report.actor,'owner');assert.equal(r.report.runner.attempts,1);assert.equal(readFileSync(join(f.repo,'src/data.json'),'utf8'),'{"value":1}\n');assert.ok(!r.stdout.includes('read-fixture'));
@@ -58,4 +61,22 @@ test('reruns lacking durable evidence and candidate caller-policy changes cannot
  const f=fixture(t);const rerun=f.run('publish','workflow_dispatch',{GITHUB_RUN_ATTEMPT:'2'});assert.equal(rerun.status,1);assert.equal(rerun.report.runner,undefined);assert.match(rerun.report.results[0].reason,/recovery/);
  const policy=JSON.parse(readFileSync(join(f.repo,'policies/agents.yaml'),'utf8'));policy.agents.remediation.allowed_callers.push('attacker');writeFileSync(join(f.repo,'policies/agents.yaml'),JSON.stringify(policy));f.event.sender.login='attacker';f.api.actor='attacker';
  const attack=f.run('publish','workflow_dispatch',{GITHUB_ACTOR:'attacker'});assert.equal(attack.status,1);assert.equal(attack.report.runner,undefined);assert.equal(JSON.parse(readFileSync(join(f.dir,'api.json'),'utf8')).writes,undefined);
+});
+test('local preparation authenticates the signed-in human and produces a proposal for review without App credentials',t=>{
+ const f=fixture(t),r=f.runLocal();assert.equal(r.status,0,r.stdout+r.stderr);assert.equal(r.report.actor,'owner');assert.equal(r.report.event,'local_manual');assert.equal(r.report.runner.proposalDigest.length,64);assert.equal(JSON.parse(readFileSync(join(f.dir,'api.json'),'utf8')).writes,undefined);
+});
+test('local publication requires approval of the precise prepared digest before reading an App key',t=>{
+ const f=fixture(t),prepared=f.runLocal();assert.equal(prepared.status,0,prepared.stdout);
+ for(const args of [[],['--approve','true','--expected-proposal-digest','0'.repeat(64)],['--approve','false','--expected-proposal-digest',prepared.report.proposalDigest]]) {
+  const r=f.runLocal('publish',[...args,'--private-key-path',join(f.dir,'missing.pem')]);assert.equal(r.status,1);assert.match(r.report.results[0].reason,/App key was not loaded/);assert.equal(JSON.parse(readFileSync(join(f.dir,'api.json'),'utf8')).writes,undefined);
+ }
+});
+test('an approved local proposal opens a signed App-authored PR and replays without loading credentials again',t=>{
+ const f=fixture(t),prepared=f.runLocal();assert.equal(prepared.status,0,prepared.stdout);const keyDirectory=mkdtempSync(join(tmpdir(),'factory-app-test-'));t.after(()=>rmSync(keyDirectory,{recursive:true,force:true}));const key=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}}).privateKey,keyPath=join(keyDirectory,'fixture.pem');writeFileSync(keyPath,key);
+ const args=['--approve','true','--expected-proposal-digest',prepared.report.proposalDigest,'--private-key-path',keyPath];const published=f.runLocal('publish',args);assert.equal(published.status,0,published.stdout+published.stderr);assert.equal(published.report.pullRequest,'https://github.com/org/repo/pull/7');assert.equal(published.report.runner.cost.spentMicrousd,100000);assert.ok(!published.stdout.includes(key));
+ Object.assign(f.api,JSON.parse(readFileSync(join(f.dir,'api.json'),'utf8')));f.api.deletedBranch=true;const writes=f.api.writes;const replay=f.runLocal('publish',[...args.slice(0,4),'--private-key-path',join(f.dir,'missing.pem')]);assert.equal(replay.status,0,replay.stdout);assert.equal(replay.report.replay,true);assert.equal(JSON.parse(readFileSync(join(f.dir,'api.json'),'utf8')).writes,writes);
+});
+test('even an approved local proposal rejects a valid App key stored inside the source repository',t=>{
+ const f=fixture(t),prepared=f.runLocal();assert.equal(prepared.status,0,prepared.stdout);const keyPath=join(f.repo,'fixture.pem'),key=generateKeyPairSync('rsa',{modulusLength:2048,privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}}).privateKey;writeFileSync(keyPath,key);
+ const r=f.runLocal('publish',['--approve','true','--expected-proposal-digest',prepared.report.proposalDigest,'--private-key-path',keyPath]);assert.equal(r.status,1);assert.equal(JSON.parse(readFileSync(join(f.dir,'api.json'),'utf8')).writes,undefined);assert.ok(!r.stdout.includes(key));
 });
