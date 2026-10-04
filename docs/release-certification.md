@@ -1,6 +1,6 @@
 # Release certification
 
-`factory-validation.mjs certify` is the release authorization gate. It does not publish a GitHub Release or deploy. It certifies only a merged pull request whose complete evidence refers to its exact head revision.
+`factory-validation.mjs certify` is the release authorization gate. It does not publish a GitHub Release or deploy. It certifies only when the evidence revision is the exact merged `main` commit (`merge_commit_sha`) for the named pull request. Validation, policy, coverage, security, SAST, required checks, and the verified artifact/SBOM refer to that merged commit. The current independent human approval is separately bound to the PR's exact reviewed head commit and the coverage comparison uses the first parent of the merged commit.
 
 The operator supplies a JSON bundle containing the original public Factory reports for `validate`, `policy`, `coverage`, `security`, `sast`, and `human-review`. The validation report must be the same report embedded in the verified build artifact. Every report must pass, use the selected trusted policy commit where applicable, and include the evaluator's evidence digest (validation uses its contract digest). The command independently verifies the downloaded artifact and SPDX SBOM, then checks the human-review report's approval count and identities against live GitHub review history.
 
@@ -10,7 +10,7 @@ An open defect is an open GitHub issue with the `defect` label. It must have exa
 
 Exception evidence must identify its approver and a valid, unexpired expiry time. Where multiple gate reports refer to the same exception, the approver and expiry must agree. Coverage evidence must also name the pull request's actual base revision, so an old comparison cannot certify a newer merge.
 
-The evidence bundle format is defined by `schemas/release-certification.schema.json`. Store the JSON output from the `validate`, `policy`, `coverage`, `security`, `sast`, and `human-review` evaluators under the matching keys in `reports`; preserve each report's revision, trusted-policy revision, evidence digest, and policy digest. For `validate`, use the exact JSON report that is embedded in the verified artifact's `validation-evidence.json`. The coverage report must include its full `baseRevision`.
+The evidence bundle format is defined by `schemas/release-certification.schema.json`. Store the JSON output from the `validate`, `policy`, `coverage`, `security`, `sast`, and `human-review` evaluators under the matching keys in `reports`; preserve each report's revision, trusted-policy revision, evidence digest, and policy digest. The five non-review reports must name the merged `main` commit. Human-review evidence must name the PR's reviewed head and use the commit's first parent as trusted policy revision. For `validate`, use the exact JSON report that is embedded in the verified artifact's `validation-evidence.json`. The coverage report must include its full `baseRevision`.
 
 Example invocation:
 
@@ -24,5 +24,7 @@ node scripts/factory-validation.mjs certify `
   --artifact-directory tmp/downloaded-release-artifact `
   --output tmp/release-certificate.json
 ```
+
+The trusted operator-dispatch workflows for creating the certificate and publishing the release are documented in [versioned releases](versioned-releases.md).
 
 The JSON certificate records repository, pull request, source and trusted revisions, policy/evidence digests, approvers, open-defect counts, check contexts, exception references, artifact digest, SBOM digest, and certification time. A blocked attempt emits gate reasons and writes no certificate.

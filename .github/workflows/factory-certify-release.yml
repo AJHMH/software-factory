@@ -1,0 +1,82 @@
+name: Factory Release Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact current main commit to certify (40-character SHA)
+        required: true
+        type: string
+      pull_request_number:
+        description: Merged pull request number for the source revision
+        required: true
+        type: string
+      producer_run_id:
+        description: Successful Factory CI run ID that produced the build artifact
+        required: true
+        type: string
+      evidence_bundle:
+        description: JSON object containing validate, policy, coverage, security, sast, and human_review reports
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  certify-release:
+    name: Certify exact source revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SOURCE_REVISION: ${{ inputs.source_revision }}
+      PULL_REQUEST_NUMBER: ${{ inputs.pull_request_number }}
+      PRODUCER_RUN_ID: ${{ inputs.producer_run_id }}
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Reject non-main dispatches and reruns before installing tools
+        run: |
+          [[ "$GITHUB_REF" == "refs/heads/main" && "$SOURCE_REVISION" == "$GITHUB_SHA" && "$GITHUB_RUN_ATTEMPT" == "1" ]]
+      - name: Set up Factory tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned Factory tools
+        run: npm ci --ignore-scripts
+      - name: Require authorized actor and exact current main revision
+        run: node scripts/release-workflow.mjs authorize --source-revision "$SOURCE_REVISION" --trusted-revision "$GITHUB_SHA" --actor "$GITHUB_ACTOR"
+      - name: Retrieve and verify producer workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$PRODUCER_RUN_ID" =~ ^[0-9]{1,20}$ ]]
+          mkdir -p tmp/run-metadata
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" == "$SOURCE_REVISION" ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID" > tmp/run-metadata/producer.json
+          node scripts/release-workflow.mjs verify-producer --source-revision "$SOURCE_REVISION" --producer-run "$PRODUCER_RUN_ID" --run-metadata tmp/run-metadata/producer.json
+      - name: Download exact source-bound CI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: factory-reference-workload-${{ inputs.source_revision }}-${{ inputs.producer_run_id }}
+          path: tmp/release-artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.producer_run_id }}
+          github-token: ${{ github.token }}
+      - name: Evaluate certification and save certificate only on success
+        env:
+          EVIDENCE_BUNDLE: ${{ inputs.evidence_bundle }}
+          FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN }}
+        run: node scripts/release-workflow.mjs certify --source-revision "$SOURCE_REVISION" --producer-run "$PRODUCER_RUN_ID" --pull-request "$PULL_REQUEST_NUMBER"
+      - name: Retain source-bound release certificate
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-release-certificate-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: tmp/release-certificate/release-certificate.json
+          if-no-files-found: error
+          retention-days: 90

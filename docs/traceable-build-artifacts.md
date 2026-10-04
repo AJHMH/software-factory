@@ -14,4 +14,4 @@ To verify an artifact manually, download it from the producer run, then run from
 node scripts/factory-validation.mjs release-artifact --mode verify --trusted-revision <source-sha> --artifact-directory <downloaded-artifact-directory>
 ```
 
-The hosted consumer workflow can also be dispatched on `main` with the producer run ID and the exact 40-character source revision. A missing, expired, altered, mismatched, or unsupported artifact fails closed. This workflow retains and verifies artifacts for traceability; it does not create a GitHub Release, deploy the workload, or satisfy release certification.
+The hosted consumer workflow can also be dispatched on `main` with the producer run ID and the exact 40-character source revision. A missing, expired, altered, mismatched, or unsupported artifact fails closed. This workflow retains and verifies artifacts for traceability; it does not itself create a GitHub Release or deploy the workload. The separate certification and publication path is documented in [versioned releases](versioned-releases.md).
