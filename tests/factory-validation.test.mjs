@@ -35,7 +35,7 @@ test('release certification is blocked by every unsupported mandatory capability
 });
 
 test('disabled optional automation reports unsupported without authorizing any action', () => {
-  const result = run('capability', 'agent-remediation');
+  const result = run('capability', 'dependency-automation');
   assert.equal(result.status, 0);
   const report = JSON.parse(result.stdout);
   assert.equal(report.outcome, 'unsupported');

@@ -10,6 +10,7 @@ it is not a Governed Automation readiness claim.
 
 The public interface is `node scripts/factory-validation.mjs`:
 
+- `remediate` authorizes bounded JSON formatting fixes; hosted publication requires protected activation. See [authorized remediation](authorized-remediation.md).
 - `inventory` reports all capabilities and exits 0; it does not approve delivery.
 - `propose-change` executes a controlled bounded fixture proposal in a private
   workspace; `prune-agent-evidence` expires its evidence without resetting budgets.
@@ -61,7 +62,7 @@ summary. A successful reporting job is never a passing workload check.
 | repository-governance | available; live configuration inspection required | yes | #9: protection bootstrap and drift; see entitlement limits |
 | bounded-agent-proposal | available; controlled fixture only | no | #10: audited broker; #11: remediation integration |
 | release-certification | unsupported | yes | #14: Exact-revision certification |
-| agent-remediation | unsupported; writes disabled | no | #10/#11: Bounded, authorized remediation |
+| agent-remediation | available for JSON formatting; hosted activation pending | no | #11: Authorized remediation and live evidence |
 | dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |
 | health-monitoring | unsupported; alerts/rollback disabled | no | #17/#18: Monitoring and rollback |
 | release-publication | unsupported; publication/deployment disabled | no | #15/#16: Publication and deployment |
@@ -75,11 +76,11 @@ not enforced by this interface; changing a policy cannot enable a missing capabi
 
 ## GitHub workflow behavior
 
-Factory workflows use `contents: read`; SAST also uses `security-events: read`.
+Factory validation workflows use `contents: read`; the inactive remediation publisher separately requests Contents write after authorization and protected environment review. SAST also uses `security-events: read`.
 Human Review also reads pull requests and Actions coverage artifacts.
 They disable checkout credential
 persistence, and have bounded job timeouts. No workflow approves or merges PRs,
-pushes code, creates fix PRs or incident issues, dispatches remediation, publishes
+creates incident issues, publishes
 packages/releases, deploys, or rolls back workloads.
 
 CI installs Factory tools, selects the supported runtime from the validated
@@ -88,8 +89,7 @@ Human Review evaluates current independent reviewers and sensitive changes. Rele
 Certification remains blocked and intentionally fails. A separate CI job runs template tests and
 typechecking; its success must not replace workload-required checks in repository
 protections. Dependency and Health schedules only report unsupported status; they
-do not maintain dependencies or measure health. Remediation has only a manual
-reporting entry point; issue-comment and repository-dispatch triggers are removed.
+do not maintain dependencies or measure health. Remediation supports authorized manual/comment/dispatch requests; its protected publisher remains inactive until configured.
 
 The new Trusted Policy workflow reads evaluator and policy from the base revision,
 with candidate files used as data only. It requires governance-approved bootstrap

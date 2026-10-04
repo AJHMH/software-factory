@@ -11,6 +11,9 @@ agents:
     retention_days: 365
     allowed_paths: ["src/", "tests/", "docs/"]
     restricted_paths: [".github/", "policies/", "infrastructure/production/"]
+  remediation:
+    allowed_callers: ['aaron-howard']
+    app_actor: 'ajhmh-software-factory[bot]'
   global:
     max_retries: 3
     budget_limit_usd_per_pr: 2.0

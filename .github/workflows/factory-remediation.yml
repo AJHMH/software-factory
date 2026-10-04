@@ -1,26 +1,108 @@
-name: Factory Automated Remediation (disabled)
+name: Factory Authorized Remediation
 
 on:
+  issue_comment:
+    types: [created]
+  repository_dispatch:
+    types: [factory-remediate]
   workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [format-json]
+        default: format-json
+        required: true
+      source_branch:
+        description: Explicit same-repository feat/ source branch
+        type: string
+        required: true
+      source_sha:
+        description: Exact 40-character source commit
+        type: string
+        required: true
+      path:
+        description: Committed JSON file under src/, tests/, or docs/
+        type: string
+        required: true
 
 permissions:
   contents: read
+  pull-requests: read
+
+concurrency:
+  group: factory-remediation-${{ github.event.comment.id || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
-  auto-remediate:
-    name: Report Disabled Agent Remediation
+  authorize:
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/factory '))
+    name: Authorize remediation caller and exact source
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      source_sha: ${{ steps.authority.outputs.source_sha }}
+      trusted_sha: ${{ steps.authority.outputs.trusted_sha }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Set up Factory tooling
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Report Factory capability inventory
-        run: node scripts/factory-validation.mjs inventory
-      - name: Report capability outcome
-        run: node scripts/factory-validation.mjs capability agent-remediation
+      - run: npm ci --ignore-scripts
+      - id: authority
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRUSTED_REVISION: ${{ github.sha }}
+        run: |
+          node scripts/factory-validation.mjs remediate --mode authorize --repository "$REPOSITORY" --trusted-repo . --trusted-revision "$TRUSTED_REVISION" --repository-path . --state-dir "$RUNNER_TEMP/factory-state" > authorization.json
+          node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync("authorization.json","utf8")); if(r.outcome!=="passed" || !/^[a-f0-9]{40}$/.test(r.revision) || !/^[a-f0-9]{40}$/.test(r.trustedRevision)) process.exit(1); fs.appendFileSync(process.env.GITHUB_OUTPUT,`source_sha=${r.revision}\ntrusted_sha=${r.trustedRevision}\n`);'
+  publish:
+    name: Propose authorized bounded fix
+    needs: authorize
+    if: vars.FACTORY_REMEDIATION_ENABLED == 'true'
+    environment: factory-remediation
+    permissions:
+      contents: write
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted broker and policy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.trusted_sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout authorized exact source as data
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.source_sha }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - working-directory: trusted
+        run: npm ci --ignore-scripts
+      - name: Create repository-scoped PR-only installation token
+        id: app
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: '5180250'
+          private-key: ${{ secrets.FACTORY_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: software-factory
+          permission-contents: read
+          permission-pull-requests: write
+      - name: Reauthorize, bound, revalidate, and open App-authored PR
+        working-directory: trusted
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          FACTORY_PUSH_TOKEN: ${{ github.token }}
+          FACTORY_PR_TOKEN: ${{ steps.app.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRUSTED_REVISION: ${{ needs.authorize.outputs.trusted_sha }}
+        run: node scripts/factory-validation.mjs remediate --mode publish --repository "$REPOSITORY" --trusted-repo . --trusted-revision "$TRUSTED_REVISION" --repository-path ../source --state-dir "$RUNNER_TEMP/factory-state"
