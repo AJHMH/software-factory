@@ -71,6 +71,14 @@ test('a stale gate report blocks certification', async () => {
   assert.equal(result.outcome, 'blocked'); assert.match(result.results[0].reason, /security evidence.*revision/i);
 });
 
+test('a passed report with no gate results blocks certification', async () => {
+  const f = fixture();
+  f.evidence.reports.security.results = [];
+  writeFileSync(f.options['--evidence'], JSON.stringify(f.evidence));
+  const result = await certifyRelease(f.options, f.dependencies);
+  assert.equal(result.outcome, 'blocked'); assert.match(result.results[0].reason, /evidence bundle is malformed or incomplete/i);
+});
+
 test('missing required hosted check blocks certification', async () => {
   const f = fixture(), path = `/repos/AJHMH/software-factory/commits/${revision}/check-runs?filter=latest&per_page=100`;
   f.responses.set(path, { check_runs: [] });

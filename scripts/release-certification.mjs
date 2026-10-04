@@ -33,7 +33,7 @@ function requireReport(report, name, revision, trusted, base) {
   if (!object(report)) throw new Error(`${name} evidence is missing, failed, incomplete, or does not match the release revision.`);
   const evidenceDigest = name === 'validate' ? report?.contractDigest : report?.evidenceDigest;
   const policyDigest = name === 'coverage' ? report?.qualityDigest : report?.policyDigest;
-  if (!object(report) || report.operation !== name || report.outcome !== 'passed' || report.revision !== revision || !Array.isArray(report.results) ||
+  if (!object(report) || report.operation !== name || report.outcome !== 'passed' || report.revision !== revision || !Array.isArray(report.results) || report.results.length === 0 ||
       report.results.some(gate => !object(gate) || gate.required !== false && gate.status !== 'passed') ||
       !/^[a-f0-9]{64}$/.test(evidenceDigest ?? '') || name !== 'validate' && !/^[a-f0-9]{64}$/.test(policyDigest ?? '')) {
     throw new Error(`${name} evidence is missing, failed, incomplete, or does not match the release revision.`);

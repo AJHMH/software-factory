@@ -22,7 +22,7 @@
       "operation": { "type": "string" }, "outcome": { "type": "string" }, "revision": { "$ref": "#/definitions/sha" },
       "trustedRevision": { "$ref": "#/definitions/sha" }, "baseRevision": { "$ref": "#/definitions/sha" },
       "contractDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "evidenceDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-      "results": { "type": "array", "items": { "type": "object", "required": ["capability", "status"], "properties": {
+      "results": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["capability", "status"], "properties": {
         "capability": { "type": "string" }, "required": { "type": "boolean" }, "status": { "type": "string" }, "reason": { "type": "string" }
       } } }
     } }
