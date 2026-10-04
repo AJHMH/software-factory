@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "revision", "reports"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "revision": { "$ref": "#/definitions/sha" },
+    "reports": {
+      "type": "object", "additionalProperties": false,
+      "required": ["validation", "policy", "coverage", "security", "sast", "human_review"],
+      "properties": {
+        "validation": { "$ref": "#/definitions/report" }, "policy": { "$ref": "#/definitions/report" },
+        "coverage": { "$ref": "#/definitions/report" }, "security": { "$ref": "#/definitions/report" },
+        "sast": { "$ref": "#/definitions/report" }, "human_review": { "$ref": "#/definitions/report" }
+      }
+    }
+  },
+  "definitions": {
+    "sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "report": { "type": "object", "required": ["operation", "outcome", "revision", "results"], "properties": {
+      "operation": { "type": "string" }, "outcome": { "type": "string" }, "revision": { "$ref": "#/definitions/sha" },
+      "trustedRevision": { "$ref": "#/definitions/sha" }, "baseRevision": { "$ref": "#/definitions/sha" },
+      "contractDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "evidenceDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+      "results": { "type": "array", "items": { "type": "object", "required": ["capability", "status"], "properties": {
+        "capability": { "type": "string" }, "required": { "type": "boolean" }, "status": { "type": "string" }, "reason": { "type": "string" }
+      } } }
+    } }
+  }
+}
