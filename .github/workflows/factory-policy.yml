@@ -30,7 +30,7 @@ jobs:
           path: candidate
           persist-credentials: false
       - name: Set up trusted Factory tooling
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Install trusted evaluator dependencies
@@ -60,7 +60,7 @@ jobs:
           path: candidate
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - working-directory: trusted

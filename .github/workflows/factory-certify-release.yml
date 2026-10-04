@@ -44,7 +44,7 @@ jobs:
         run: |
           [[ "$GITHUB_REF" == "refs/heads/main" && "$SOURCE_REVISION" == "$GITHUB_SHA" && "$GITHUB_RUN_ATTEMPT" == "1" ]]
       - name: Set up Factory tooling
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Install pinned Factory tools

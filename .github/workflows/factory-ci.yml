@@ -20,7 +20,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Factory tooling
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Install pinned Factory tools
@@ -29,7 +29,7 @@ jobs:
         id: profile
         run: node scripts/factory-validation.mjs profile
       - name: Set up selected workload runtime
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ steps.profile.outputs.node_version }}
       - name: Report Factory capability inventory
@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Factory tooling
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Install pinned development tools
