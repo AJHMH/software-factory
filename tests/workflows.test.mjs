@@ -70,7 +70,7 @@ test('SAST CI evaluates exact-head native analyses with read-only security permi
 test('the trusted policy workflow never runs candidate code or uses candidate policy authority', () => {
   const workflow = parse(readFileSync(join(root, '.github/workflows/factory-policy.yml'), 'utf8'));
   assert.deepEqual(Object.keys(workflow.on), ['pull_request_target']);
-  assert.deepEqual(workflow.permissions, { contents: 'read' });
+  assert.deepEqual(workflow.permissions, { contents: 'read', 'pull-requests': 'read', actions: 'read' });
   const job = workflow.jobs['trusted-policy'];
   assert.equal(job['timeout-minutes'], 5);
   assert.equal(job.permissions, undefined);
