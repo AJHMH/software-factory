@@ -103,7 +103,7 @@ test('the live collector enforces GitHub identities, permissions, pagination and
     f.write('api-fixture.json',transcript);
     f.write('api-preload.mjs',`import {readFileSync} from 'node:fs';
       const fixture=JSON.parse(readFileSync(new URL('./api-fixture.json',import.meta.url),'utf8'));let requests=0;
-      globalThis.fetch=async value=>{
+      globalThis.fetch=async (value,options)=>{
         const url=new URL(value);if(url.origin !== 'https://api.github.com') throw new Error('Unexpected host');
         let data;
         if(url.pathname.endsWith('/reviews')) {
@@ -112,6 +112,7 @@ test('the live collector enforces GitHub identities, permissions, pagination and
           data=page === 1 ? Array.from({length:100},(_,index)=>({...review,id:index+1,state:'COMMENTED'})) : [review];
         } else if(url.pathname.endsWith('/permission')) data={permission:fixture.mode === 'read-only' ? 'read' : 'write'};
         else {requests++;data={state:fixture.mode === 'merged' ? 'closed' : 'open',merged:fixture.mode === 'merged',merge_commit_sha:fixture.revision,head:{sha:fixture.mode === 'race' && requests > 1 ? 'b'.repeat(40) : fixture.revision},base:{sha:fixture.base,repo:{full_name:'owner/repo'}},user:{login:'author'}};}
+        if(fixture.mode === 'merged' && options.headers['X-GitHub-Api-Version'] !== '2022-11-28') delete data.merge_commit_sha;
         return new Response(JSON.stringify(data),{status:200});
       };`);
     const result=spawnSync(process.execPath,['--import',pathToFileURL(join(f.repo,'api-preload.mjs')).href,cli,'collect-reviews',...(mode === 'merged' ? ['--merged-revision',f.evidence.revision] : []),'--trusted-revision',f.base,'--base-revision',f.base,'--contract',join(f.repo,'factory-contract.yaml'),'--repository','owner/repo','--pull-request','1'],{cwd:root,encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'fixture-not-a-secret',GITHUB_STEP_SUMMARY:''}});
