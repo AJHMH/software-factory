@@ -21,7 +21,8 @@ async function github(path, fetchImpl) {
   if (!token) throw new Error('FACTORY_GITHUB_TOKEN is required to verify live GitHub release evidence.');
   const url = new URL(path, endpoint);
   const response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(30000), headers: {
-    Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10',
+    // Exact merged-source binding requires the PR field removed from the 2026 response.
+    Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': /^repos\/[^/]+\/[^/]+\/pulls\/[1-9][0-9]*$/.test(path) ? '2022-11-28' : '2026-03-10',
   } });
   if (!response.ok) throw new Error(`GitHub returned ${response.status}; live release evidence is unavailable.`);
   return response.json();

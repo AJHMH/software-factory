@@ -7,7 +7,9 @@ import { rawGit } from './coverage-evaluation.mjs';
 /** @param {string} path */
 async function api(path) {
   if(!process.env.FACTORY_GITHUB_TOKEN) throw new Error('GitHub authentication unavailable.');
-  const response=await fetch(`https://api.github.com/${path}`,{headers:{Authorization:`Bearer ${process.env.FACTORY_GITHUB_TOKEN}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10'},signal:AbortSignal.timeout(30000),redirect:'error'});
+  // The 2026 PR response removes merge_commit_sha; retain its supported exact-merge contract.
+  const version=/^repos\/[^/]+\/[^/]+\/pulls\/[1-9][0-9]*$/.test(path) ? '2022-11-28' : '2026-03-10';
+  const response=await fetch(`https://api.github.com/${path}`,{headers:{Authorization:`Bearer ${process.env.FACTORY_GITHUB_TOKEN}`,Accept:'application/vnd.github+json','X-GitHub-Api-Version':version},signal:AbortSignal.timeout(30000),redirect:'error'});
   if(!response.ok) throw new Error('Review evidence unavailable.');
   const text=await response.text();if(text.length > 8*1024*1024) throw new Error('Response too large.');
   return JSON.parse(text);
