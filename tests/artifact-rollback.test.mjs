@@ -158,7 +158,8 @@ test('failed recovery verification records the attempted switch and prevents ano
   const active = join(f.state, 'current.json');
   const asset = join(f.state, 'releases/v1.0.0/reference-workload.mjs');
   // Simulate storage corruption at the documented filesystem activation boundary.
-  writeFileSync(preload, `import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module'; const rename = fs.renameSync; fs.renameSync = (source, target) => { rename(source, target); if (target === ${JSON.stringify(active)}) fs.writeFileSync(${JSON.stringify(asset)}, 'corrupt'); }; syncBuiltinESMExports();`);
+  writeFileSync(join(f.directory, 'storage-failure.json'), JSON.stringify({ active, asset }));
+  writeFileSync(preload, "import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module'; const { active, asset } = JSON.parse(fs.readFileSync(new URL('./storage-failure.json', import.meta.url), 'utf8')); const rename = fs.renameSync; fs.renameSync = (source, target) => { rename(source, target); if (target === active) fs.writeFileSync(asset, 'corrupt'); }; syncBuiltinESMExports();");
   f.nodeArgs.push('--import', pathToFileURL(preload).href);
   const failed = f.rollback();
   assert.equal(failed.report.outcome, 'escalated');
