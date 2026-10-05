@@ -1,0 +1,19 @@
+schema_version: 1
+version: 1.0.0
+contract_version: '1.0'
+policy_pack: baseline-1
+profiles:
+  node-24:
+    node_major: '24'
+    artifact_adapter: single-module-npm-v1
+entry_points:
+  validation: .github/workflows/factory-consumer-validation.yml
+  certification: .github/workflows/factory-consumer-certification.yml
+policy_files:
+  - policies/enforcement.yaml
+  - policies/governance.yaml
+  - policies/human-review.yaml
+  - policies/quality.yaml
+  - policies/security.yaml
+  - policies/dependencies.yaml
+  - profiles/workloads.yaml

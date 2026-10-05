@@ -48,6 +48,13 @@ The public interface is `node scripts/factory-validation.mjs`:
   created or recovered.
 - Unknown commands, names, flags, or extra arguments exit 2 without a success report.
 
+`rollback --mode evaluate|apply` consumes fresh deployment-correlated health evidence
+and retained reference packages under pinned policy. It restores compatible bytes,
+verifies recovery of package identity, prevents repeated attempts, and escalates
+unsafe or unsupported restoration. See the [rollback runbook](runbooks/deployment-rollback.md)
+for required inputs and the reference/runtime boundary. No automatic hosted rollback
+or endpoint recovery claim is enabled by this operation.
+
 Reports contain schema version, operation, outcome, and capability results with
 status, request requirement, release requirement, reason, and tracking issue.
 When GitHub provides a step-summary file, the same report is appended as an operator
@@ -70,6 +77,7 @@ summary. A successful reporting job is never a passing workload check.
 | agent-remediation | available for JSON formatting; local operator gate | no | #11: Authorized remediation and live evidence |
 | dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |
 | health-monitoring | available; HTTPS endpoint probes, deduplicated GitHub incidents/recovery, and retained evidence | no | #18: Safe deployment rollback; external paging and non-GitHub alert adapters remain unsupported |
+| artifact-rollback | available; operator-driven retained reference package restoration and escalation | no | #18: implemented locally; runtime adapters and hosted rollback remain unsupported |
 | release-publication | unsupported; publication/deployment disabled | no | #15/#16: Publication and deployment |
 
 See [contract execution](contract-execution.md) for schema, runtime, shell,

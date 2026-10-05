@@ -8,7 +8,8 @@ After the threshold, it opens or reuses one GitHub issue for the endpoint and cl
 it with a recovery notification when checks pass again. State and evidence artifacts
 are retained for 90 days. GitHub's scheduler can delay or skip runs, so this is not a
 hard real-time monitoring guarantee. External paging, automatic rollback, and
-remediation remain disabled; see [capabilities](capabilities.md) and ticket #18.
+remediation remain disabled. Local reference package rollback is available through
+Factory Validation; see the [rollback runbook](runbooks/deployment-rollback.md).
 
 Before enabling monitoring, set repository Actions variable
 `FACTORY_HEALTH_ENDPOINT` to the deployed workload's HTTPS health URL. The value
@@ -50,4 +51,4 @@ service.
 1. **Detection:** The `Factory Health Checks` workflow records endpoint probe outcomes.
 2. **Triage:** After the configured consecutive-failure threshold, it opens or reuses the single matching GitHub incident issue.
 3. **Recovery:** A passing probe closes the active incident with a recovery comment and measured incident duration.
-4. **Escalation:** A human investigates and follows the runbook. The workflow does not page, roll back, or dispatch remediation; those actions require separate implementation and authorization.
+4. **Escalation:** A human investigates and follows the runbook. The workflow does not page, roll back, or dispatch remediation. The local `rollback` operation can restore a retained compatible reference package; runtime recovery requires a supported runtime adapter.

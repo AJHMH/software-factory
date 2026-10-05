@@ -1,0 +1,10 @@
+version: 1.0
+rollback:
+  adapter: filesystem-reference-v1
+  environment: reference
+  enabled: true
+  consecutive_failures: 3
+  max_health_age_seconds: 300
+  timeout_seconds: 60
+  max_attempts_per_deployment: 1
+  allowed_migration_strategies: [none]

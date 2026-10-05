@@ -1,0 +1,103 @@
+name: Factory Consumer Validation v1
+on:
+  workflow_call:
+    inputs:
+      source_revision:
+        type: string
+        required: true
+    outputs:
+      artifact_name:
+        description: Immutable consumer build and validation evidence
+        value: ${{ jobs.validation.outputs.artifact_name }}
+permissions:
+  contents: read
+jobs:
+  validation:
+    name: Execute Factory Contract Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact_name: factory-consumer-${{ inputs.source_revision }}-${{ github.run_id }}
+    steps:
+      - name: Require immutable consumer source revision
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: '[[ "$SOURCE_REVISION" =~ ^[a-f0-9]{40}$ ]]'
+      - name: Check out the executing Factory distribution
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned Factory tools
+        working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect committed adoption against the approved distribution
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: >-
+          node scripts/factory-validation.mjs distribution --mode inspect
+          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
+          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
+          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - name: Execute consumer workload with no certification credentials
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: >-
+          node scripts/factory-validation.mjs distribution --mode validate
+          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
+          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
+          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+          --output tmp/distribution.json
+      - name: Extract exact validation evidence
+        working-directory: factory
+        run: node -e "const fs=require('node:fs');const r=JSON.parse(fs.readFileSync('tmp/distribution.json'));fs.writeFileSync('tmp/validation.json',JSON.stringify(r.validation))"
+      - name: Package immutable consumer output and SBOM
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: >-
+          node scripts/factory-validation.mjs release-artifact --mode produce
+          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
+          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
+          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+          --validation-evidence tmp/validation.json --output-dir ../consumer/tmp/release-artifact
+      - name: Retain source-bound consumer package
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: |
+            consumer/tmp/release-artifact
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain adoption evidence even on failed gates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-adoption-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/distribution.json
+          if-no-files-found: warn
+          retention-days: 90

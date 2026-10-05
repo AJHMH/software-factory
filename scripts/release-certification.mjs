@@ -5,6 +5,7 @@ import Ajv from 'ajv';
 import { collectGovernance } from './governance.mjs';
 import { digest, git } from './policy-evaluation.mjs';
 import { releaseArtifact } from './release-artifact.mjs';
+import { distributionContext } from './factory-distribution.mjs';
 
 const severity = ['critical', 'high', 'medium', 'low'];
 const endpoint = 'https://api.github.com/';
@@ -50,6 +51,8 @@ export async function certifyRelease(options, dependencies = {}) {
     const prNumber = Number(options['--pull-request']);
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '') || !/^[a-f0-9]{40}$/.test(trusted ?? '') || !Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('Repository, full trusted revision, and pull request number are required.');
     const trustedRepo = resolve(options['--trusted-repo'] ?? '.');
+    const distribution = options['--consumer-repo'] ? distributionContext(options) : undefined;
+    const sourceRepo = distribution?.consumerRepo ?? trustedRepo;
     if (git(trustedRepo, ['cat-file', '-t', trusted]) !== 'commit') throw new Error('Trusted policy revision must identify a commit.');
     /** @param {string} path */ const policyFile = (path) => git(trustedRepo, ['show', `${trusted}:${path}`]);
     const governancePolicy = parse(policyFile('policies/governance.yaml'))?.governance?.repository_protection;
@@ -60,20 +63,21 @@ export async function certifyRelease(options, dependencies = {}) {
     const evidence = /** @type {Json} */ (JSON.parse(readFileSync(resolve(options['--evidence']), 'utf8')));
     if (!validateBundle(evidence)) throw new Error('Release evidence bundle is malformed or incomplete.');
     const revision = evidence.revision;
-    if (git(trustedRepo, ['cat-file', '-t', revision]) !== 'commit') throw new Error('Certified release revision is unavailable in the trusted checkout.');
+    if (distribution && distribution.sourceRevision !== revision) throw new Error('Certification evidence does not match the pinned consumer source revision.');
+    if (git(sourceRepo, ['cat-file', '-t', revision]) !== 'commit') throw new Error('Certified release revision is unavailable in the source checkout.');
     requireReport(evidence.reports.validation, 'validate', revision);
     requireReport(evidence.reports.policy, 'policy', revision, trusted);
     requireReport(evidence.reports.coverage, 'coverage', revision, trusted);
     requireReport(evidence.reports.security, 'security', revision, trusted);
     requireReport(evidence.reports.sast, 'sast', revision, trusted);
     const coverageBase = evidence.reports.coverage.baseRevision;
-    if (!/^[a-f0-9]{40}$/.test(coverageBase ?? '') || git(trustedRepo, ['cat-file', '-t', coverageBase]) !== 'commit' || git(trustedRepo, ['merge-base', '--is-ancestor', coverageBase, revision]) !== '') throw new Error('Coverage baseline is missing, invalid, or outside the certified source history.');
+    if (!/^[a-f0-9]{40}$/.test(coverageBase ?? '') || git(sourceRepo, ['cat-file', '-t', coverageBase]) !== 'commit' || git(sourceRepo, ['merge-base', '--is-ancestor', coverageBase, revision]) !== '') throw new Error('Coverage baseline is missing, invalid, or outside the certified source history.');
     const apiPrefix = `repos/${repository}`;
     const pr = await github(`${apiPrefix}/pulls/${prNumber}`, fetchImpl);
     if (pr.merged !== true || pr.state !== 'closed' || !/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '') || pr.merge_commit_sha !== revision || pr.base?.ref !== 'main') throw new Error('The pull request must be merged into main, and the certificate revision must be its exact squash/merge commit.');
-    const mergedBase = git(trustedRepo, ['rev-parse', `${revision}^1`]);
+    const mergedBase = git(sourceRepo, ['rev-parse', `${revision}^1`]);
     if (coverageBase !== mergedBase) throw new Error('Coverage evidence baseline does not match the pull request base revision.');
-    requireReport(evidence.reports.human_review, 'human-review', pr.head.sha, mergedBase);
+    requireReport(evidence.reports.human_review, 'human-review', pr.head.sha, distribution ? trusted : mergedBase, distribution ? mergedBase : undefined);
     const [checkData, reviews, issueData] = await Promise.all([
       github(`${apiPrefix}/commits/${revision}/check-runs?filter=latest&per_page=100`, fetchImpl),
       github(`${apiPrefix}/pulls/${prNumber}/reviews?per_page=100`, fetchImpl),
@@ -118,11 +122,13 @@ export async function certifyRelease(options, dependencies = {}) {
     const assurance = dependencyPolicy.release_assurance ?? {};
     if (!object(assurance) || assurance.max_dependency_age_days !== undefined && assurance.max_dependency_age_days !== null && (!Number.isSafeInteger(assurance.max_dependency_age_days) || assurance.max_dependency_age_days < 1) || assurance.require_provenance_attestation !== undefined && typeof assurance.require_provenance_attestation !== 'boolean') throw new Error('Trusted dependency-age or provenance policy is malformed.');
     if (assurance.max_dependency_age_days !== undefined && assurance.max_dependency_age_days !== null || assurance.require_provenance_attestation === true) throw new Error('Configured dependency-age or provenance policy requires metadata not supported by the available SBOM.');
-    const artifact = /** @type {Json} */ (dependencies.releaseArtifact ? await dependencies.releaseArtifact(revision, resolve(options['--artifact-directory'] ?? '')) : await releaseArtifact({ '--mode': 'verify', '--trusted-repo': trustedRepo, '--trusted-revision': revision, '--artifact-directory': resolve(options['--artifact-directory'] ?? '') }));
+    /** @type {Record<string,string>} */ const artifactOptions = distribution ? { ...options, '--mode': 'verify' } : { '--trusted-repo': trustedRepo, '--trusted-revision': revision };
+    const artifact = /** @type {Json} */ (dependencies.releaseArtifact ? await dependencies.releaseArtifact(revision, resolve(options['--artifact-directory'] ?? '')) : await releaseArtifact({ ...artifactOptions, '--mode': 'verify', '--artifact-directory': resolve(options['--artifact-directory'] ?? '') }));
     if (artifact.outcome !== 'passed' || !/^[a-f0-9]{64}$/.test(artifact.artifactDigest ?? '') || !/^[a-f0-9]{64}$/.test(artifact.sbomDigest ?? '')) throw new Error('The exact-revision build artifact or SBOM failed verification.');
     if (artifact.validationEvidenceDigest !== digest(JSON.stringify(evidence.reports.validation))) throw new Error('Factory validation evidence does not match the verified artifact bundle.');
     const dependencySource = artifact.dependencySource;
-    if (!dependencySource || dependencySource.ecosystem !== 'npm' || dependencySource.registry !== dependencyPolicy.artifact.dependency_registry || dependencySource.lockfile !== dependencyPolicy.artifact.source_lockfile || dependencySource.lockfileVersion !== dependencyPolicy.artifact.lockfile_version || dependencySource.includesDevelopmentDependencies !== dependencyPolicy.artifact.include_development_dependencies || dependencySource.packageCount !== artifact.dependencyCount) throw new Error('Registry, lockfile, or dependency-source metadata is missing or differs from trusted policy.');
+    const expectedLockfile = distribution ? `${distribution.contract.contract.working_directory.replace(/\\/g,'/').replace(/\/$/,'')}/package-lock.json` : dependencyPolicy.artifact.source_lockfile;
+    if (!dependencySource || dependencySource.ecosystem !== 'npm' || dependencySource.registry !== dependencyPolicy.artifact.dependency_registry || dependencySource.lockfile !== expectedLockfile || dependencySource.lockfileVersion !== dependencyPolicy.artifact.lockfile_version || dependencySource.includesDevelopmentDependencies !== dependencyPolicy.artifact.include_development_dependencies || dependencySource.packageCount !== artifact.dependencyCount) throw new Error('Registry, lockfile, or dependency-source metadata is missing or differs from trusted policy.');
     const certificateExceptions = Object.entries(evidence.reports).flatMap(([gate, report]) => (report.exceptions ?? []).map((/** @type {Json} */ exception) => {
       const expiresAt = exception.expiresAt ?? exception.expires_at;
       const expiry = typeof expiresAt === 'string' ? Date.parse(expiresAt) : Number.NaN;

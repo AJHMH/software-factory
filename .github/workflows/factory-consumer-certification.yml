@@ -1,0 +1,110 @@
+name: Factory Consumer Certification v1
+on:
+  workflow_call:
+    inputs:
+      source_revision:
+        type: string
+        required: true
+      producer_run_id:
+        type: string
+        required: true
+      pull_request_number:
+        type: string
+        required: true
+      evidence_bundle:
+        type: string
+        required: true
+    secrets:
+      FACTORY_GITHUB_TOKEN:
+        description: Read access to consumer checks, reviews, and repository governance
+        required: false
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+jobs:
+  certification:
+    name: Certify exact consumer revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require immutable consumer source revision
+        env:
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: '[[ "$SOURCE_REVISION" =~ ^[a-f0-9]{40}$ ]]'
+      - name: Check out executing Factory policy and evaluator
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out consumer as data only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Check independently approved distribution before reading credentials
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: >-
+          node scripts/factory-validation.mjs distribution --mode inspect
+          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
+          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
+          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - name: Verify producer identity and write bounded evidence bundle
+        working-directory: factory
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PRODUCER_RUN_ID: ${{ inputs.producer_run_id }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          EVIDENCE_BUNDLE: ${{ inputs.evidence_bundle }}
+        run: |
+          [[ "$PRODUCER_RUN_ID" =~ ^[0-9]{1,20}$ ]]
+          mkdir -p tmp
+          gh api "repos/$REPOSITORY/actions/runs/$PRODUCER_RUN_ID" > tmp/producer.json
+          node scripts/consumer-producer.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: factory-consumer-${{ inputs.source_revision }}-${{ inputs.producer_run_id }}
+          path: factory/tmp/release-artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.producer_run_id }}
+          github-token: ${{ github.token }}
+      - name: Enforce exact-revision certification without executing consumer code
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST: ${{ inputs.pull_request_number }}
+          FACTORY_GITHUB_TOKEN: ${{ secrets.FACTORY_GITHUB_TOKEN || github.token }}
+        run: >-
+          node scripts/factory-validation.mjs certify
+          --repository "$REPOSITORY" --pull-request "$PULL_REQUEST"
+          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
+          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
+          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+          --evidence tmp/evidence.json --artifact-directory tmp/release-artifact
+          --output tmp/release-certificate.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-certificate-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/release-certificate.json
+          if-no-files-found: error
+          retention-days: 90
