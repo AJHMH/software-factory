@@ -51,6 +51,7 @@ export function evaluatePolicy(options) {
     const failed = Object.values(contract.commands).some(command => command.timeout_seconds > maximum);
     return { operation: 'policy', outcome: failed ? 'blocked' : 'passed', trustedRevision, revision,
       policyDigest: digest(policySource), profileDigest: digest(profileSource), contractDigest,
+      evidenceDigest: digest(JSON.stringify({revision,trustedRevision,contractDigest,maximum,exceptions})),
       workingTreeDirty: git(dirname(resolve(options['--contract'] ?? 'factory-contract.yaml')), ['status', '--porcelain']).length > 0,
       exceptions: exceptions.map(exception => ({ id: exception.id, evidenceId: exception.evidence_id, approver: exception.approver, expiresAt: exception.expires_at })),
       effectivePolicy: { maximum_command_timeout_seconds: maximum },

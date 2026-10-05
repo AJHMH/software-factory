@@ -117,3 +117,5 @@ GitHub workflow identity properties are documented in the
 [job context reference](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#job-context).
 They are unavailable on GitHub Enterprise Server; this distribution currently
 targets GitHub Cloud and fails rather than falling back to mutable caller metadata.
+
+For distribution 1.0.1 gate production, scoped read setup, exact hosted check names, evidence assembly and certification recovery, see [consumer certification](consumer-certification.md) and [ADR 008](adrs/008-consumer-certification-evidence.md).

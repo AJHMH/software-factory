@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import { git, digest } from './policy-evaluation.mjs';
+import { distributionContext } from './factory-distribution.mjs';
 
 /** @typedef {{context:string,integration_id:number}} Check */
 /** @typedef {{type:string,parameters?:Record<string,any>}} Rule */
@@ -13,6 +14,8 @@ function authority(options) {
   if(!/^[a-f0-9]{40}$/.test(sha ?? '') || git(options['--trusted-repo'] ?? '.',['cat-file','-t',sha]) !== 'commit') throw new Error('A full trusted Governance commit is required.');
   const source=git(options['--trusted-repo'] ?? '.',['show',`${sha}:policies/governance.yaml`]),policy=parse(source)?.governance?.repository_protection;
   if(!Number.isInteger(policy?.minimum_approvals) || policy.minimum_approvals < 1 || policy.minimum_approvals > 6 || !Array.isArray(policy.required_checks) || !policy.required_checks.length || policy.required_checks.some((/** @type {Check} */ c)=>typeof c.context !== 'string' || !c.context.trim() || !Number.isInteger(c.integration_id) || c.integration_id < 1) || new Set(policy.required_checks.map((/** @type {Check} */ c)=>c.context)).size !== policy.required_checks.length || Object.keys(policy).some(k=>!['minimum_approvals','required_checks'].includes(k))) throw new Error('Invalid authoritative Governance protection policy.');
+  const distribution=options['--consumer-repo'] ? distributionContext(options) : undefined;
+  if (distribution) policy.required_checks=policy.required_checks.map((/** @type {Check} */ check)=>({...check,context:'validation / '+check.context}));
   return {sha,policyDigest:digest(source),minimum:/** @type {number} */(policy.minimum_approvals),checks:/** @type {Check[]} */(policy.required_checks)};
 }
 /** @param {string} pattern @param {string} ref */

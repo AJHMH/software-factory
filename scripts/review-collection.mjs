@@ -75,7 +75,10 @@ export async function collectReviews(options) {
     const context=reviewContext(options), repository=options['--repository'], pull=options['--pull-request'];
     if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '') || !/^[1-9][0-9]*$/.test(pull ?? '')) throw new Error('Invalid PR identity.');
     const endpoint=`repos/${repository}/pulls/${pull}`, pr=await api(endpoint);
-    if(pr.state !== 'open' || pr.head.sha !== context.revision || pr.base.sha !== context.base || pr.base.repo.full_name.toLowerCase() !== repository.toLowerCase()) throw new Error('PR identity changed.');
+    const merged=options['--merged-revision'];
+    const expectedState=merged ? 'closed' : 'open';
+    const validMerge=/** @param {any} value */(value)=>!merged || /^[a-f0-9]{40}$/.test(merged) && value.merged === true && value.merge_commit_sha === merged && rawGit(context.repo,['rev-parse',`${merged}^1`]).trim() === context.base;
+    if(pr.state !== expectedState || !validMerge(pr) || pr.head.sha !== context.revision || pr.base.sha !== context.base || pr.base.repo.full_name.toLowerCase() !== repository.toLowerCase()) throw new Error('PR identity changed.');
     const reviews=/** @type {GitHubReview[]} */(await list(`${endpoint}/reviews`));
     /** @type {Map<string,string>} */ const permissions=new Map();
     const normalized=[];
@@ -100,7 +103,7 @@ export async function collectReviews(options) {
       writeFileSync(filename,source);evaluationOptions={...options,'--coverage-evidence':filename};
     }
     const current=await api(endpoint);
-    if(current.head.sha !== context.revision || current.base.sha !== context.base || current.state !== 'open') throw new Error('PR changed during collection.');
+    if(current.head.sha !== context.revision || current.base.sha !== context.base || current.state !== expectedState || !validMerge(current)) throw new Error('PR changed during collection.');
     if(JSON.stringify(await list(`${endpoint}/reviews`)) !== JSON.stringify(reviews)) throw new Error('Reviews changed during collection.');
     if(options['--output']) writeFileSync(options['--output'],JSON.stringify(evidence,null,2)+'\n');
     return evaluateHumanReview(evaluationOptions,evidence);
