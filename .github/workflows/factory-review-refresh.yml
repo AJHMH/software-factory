@@ -1,0 +1,66 @@
+name: Factory Approval Refresh
+
+on:
+  workflow_run:
+    workflows: [Factory Review Event]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  resolve:
+    name: Resolve authorized review event
+    if: github.event.workflow_run.event == 'pull_request_review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      pull_request: ${{ steps.resolve.outputs.pull_request }}
+      base_revision: ${{ steps.resolve.outputs.base_revision }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - name: Resolve with trusted default-branch code
+        id: resolve
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRIGGER_RUN: ${{ github.event.workflow_run.id }}
+          TRUSTED_REVISION: ${{ github.sha }}
+        run: node scripts/factory-validation.mjs refresh-approvals --mode inspect --repository "$REPOSITORY" --trigger-run "$TRIGGER_RUN" --trusted-repo . --trusted-revision "$TRUSTED_REVISION"
+  refresh:
+    name: Refresh existing approval jobs
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    concurrency:
+      group: factory-approval-refresh-${{ needs.resolve.outputs.pull_request }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.base_revision }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - name: Revalidate current review and original jobs using trusted base code
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRIGGER_RUN: ${{ github.event.workflow_run.id }}
+          TRUSTED_REVISION: ${{ needs.resolve.outputs.base_revision }}
+        run: node scripts/factory-validation.mjs refresh-approvals --mode apply --repository "$REPOSITORY" --trigger-run "$TRIGGER_RUN" --trusted-repo . --trusted-revision "$TRUSTED_REVISION"

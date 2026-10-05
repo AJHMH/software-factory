@@ -24,7 +24,7 @@ Use [bounded agents](bounded-agent-proposals.md) and [authorized remediation](au
 
 ## Audit and retention
 
-Retain revision-bound reports, current reviews, check conclusions, artifact/SBOM digests, verified attestations and deployment/incident receipts. Revalidate authorization before mutations. [#30](https://github.com/AJHMH/software-factory/issues/30) tracks automatic approval-check refresh; until resolved, rerun after current human review.
+Retain revision-bound reports, current reviews, check conclusions, artifact/SBOM digests, verified attestations and deployment/incident receipts. Revalidate authorization before mutations. [Approval refresh](approval-refresh.md) requests reevaluation of existing jobs after current reviews. Bootstrap, stale/unbound runs or unavailable APIs can require an operator rerun after inspecting actual GitHub review evidence.
 
 Schedule `prune-agent-evidence` at least daily. Detailed private evidence expires under trusted policy; minimal cost/identity/replay reservations remain durable. [Bounded agents](bounded-agent-proposals.md) explains redaction and host ACLs. Delivery/health retention is configured in workflows (health: 90 days); verify actual hosted expiry and storage access before claiming it works. Keep raw diagnostics private. Fixture cleanup does not prove remote retention or compliance.
 

@@ -1,0 +1,19 @@
+name: Factory Review Event
+run-name: factory-review-event:${{ github.event.pull_request.number }}:${{ github.event.pull_request.head.sha }}:${{ github.event.pull_request.base.sha }}:${{ github.event.action }}
+
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    name: Observe review event
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Observe without evaluating or executing candidate content
+        run: 'true'

@@ -1,4 +1,5 @@
 name: Factory Trusted Policy
+run-name: factory-review:${{ github.event.pull_request.number }}:${{ github.event.pull_request.head.sha }}:${{ github.event.pull_request.base.sha }}
 
 on:
   pull_request_target:
