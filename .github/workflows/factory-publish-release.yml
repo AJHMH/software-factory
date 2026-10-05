@@ -63,7 +63,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CERTIFICATION_RUN_ID" > tmp/run-metadata/certification.json
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID" > tmp/run-metadata/producer.json
       - name: Download successful certification artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: factory-release-certificate-${{ inputs.source_revision }}-${{ inputs.certification_run_id }}
           path: tmp/certificate
@@ -71,7 +71,7 @@ jobs:
           run-id: ${{ inputs.certification_run_id }}
           github-token: ${{ github.token }}
       - name: Download certified source artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: factory-reference-workload-${{ inputs.source_revision }}-${{ inputs.producer_run_id }}
           path: tmp/release-artifact

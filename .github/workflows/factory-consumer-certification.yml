@@ -77,7 +77,7 @@ jobs:
           mkdir -p tmp
           gh api "repos/$REPOSITORY/actions/runs/$PRODUCER_RUN_ID" > tmp/producer.json
           node scripts/consumer-producer.mjs
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: factory-consumer-${{ inputs.source_revision }}-${{ inputs.producer_run_id }}
           path: factory/tmp/release-artifact

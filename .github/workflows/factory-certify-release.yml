@@ -61,7 +61,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCER_RUN_ID" > tmp/run-metadata/producer.json
           node scripts/release-workflow.mjs verify-producer --source-revision "$SOURCE_REVISION" --producer-run "$PRODUCER_RUN_ID" --run-metadata tmp/run-metadata/producer.json
       - name: Download exact source-bound CI artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: factory-reference-workload-${{ inputs.source_revision }}-${{ inputs.producer_run_id }}
           path: tmp/release-artifact
