@@ -20,3 +20,14 @@ verifies its bytes. It records one attempt per deployment and escalates unsafe o
 unsupported recovery. Reference package restoration does not establish running
 service recovery. See the [rollback runbook](docs/runbooks/deployment-rollback.md)
 and [ADR 004](docs/adrs/004-reference-package-rollback.md).
+
+## Versioned Factory consumers
+
+Factory distribution v1 exposes SHA-pinned reusable validation/certification
+workflows and a baseline policy pack. A consumer lock and independently selected
+repository variable must match the executing Factory revision. Consumer source
+history stays separate from Factory policy history. The second integration consumer
+uses an isolated Node 24 test workload in `AJHMH/developer-agentic-os`; its Next.js
+application is outside the single-module adapter's certification scope. See
+[distribution](docs/factory-distribution.md) and
+[ADR 005](docs/adrs/005-versioned-factory-distribution.md).

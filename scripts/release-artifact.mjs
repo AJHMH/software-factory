@@ -4,6 +4,7 @@ import {dirname,join,relative,resolve,isAbsolute} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {parse} from 'yaml';
 import {rawGit} from './coverage-evaluation.mjs';
+import {distributionContext} from './factory-distribution.mjs';
 
 const format='SPDX-2.3';
 const artifactName='reference-workload.mjs';
@@ -52,16 +53,16 @@ function resolvePackage(lock,parent,name) {
  }
  const root=`node_modules/${name}`;return Object.hasOwn(lock.packages,root)?root:undefined;
 }
-/** @param {string} repo @param {string} revision */
-function context(repo,revision) {
+/** @param {string} repo @param {string} revision @param {ReturnType<typeof distributionContext>} [distribution] */
+function context(repo,revision,distribution) {
  if(!/^[a-f0-9]{40}$/.test(revision??'') || git(repo,['cat-file','-t',revision])!=='commit') deny('A trusted source commit is required.');
  const contractSource=rawGit(repo,['show',`${revision}:factory-contract.yaml`]),contract=parse(contractSource)?.contract;
- if(!object(contract) || contract.workload_id!=='factory-reference-workload' || contract.profile!=='node-24' || typeof contract.working_directory!=='string') deny('The committed reference workload contract is unsupported.');
+ if(!object(contract) || !distribution && contract.workload_id!=='factory-reference-workload' || contract.profile!=='node-24' || typeof contract.working_directory!=='string') deny('The committed reference workload contract is unsupported.');
  const workloadDirectory=contract.working_directory.replace(/\\/g,'/').replace(/\/$/,''),prefix=workloadDirectory+'/',manifestPath=prefix+'package.json',lockPath=prefix+'package-lock.json',sourcePath=prefix+'src/index.mjs';
  if(workloadDirectory.startsWith('/') || workloadDirectory.split('/').some(part=>!part || part==='.' || part==='..')) deny('The committed workload path is unsafe.');
  const manifest=parseJson(rawGit(repo,['show',`${revision}:${manifestPath}`])),lock=parseJson(rawGit(repo,['show',`${revision}:${lockPath}`]));
- const dependencyPolicy=parse(rawGit(repo,['show',`${revision}:policies/dependencies.yaml`]))?.dependencies;
- const sourcePolicy=dependencyPolicy?.artifact;
+ const dependencyPolicy=parse(rawGit(distribution?.factoryRepo??repo,['show',`${distribution?.revision??revision}:policies/dependencies.yaml`]))?.dependencies;
+ const sourcePolicy=distribution ? {...dependencyPolicy?.artifact,source_lockfile:lockPath} : dependencyPolicy?.artifact;
  if(!object(sourcePolicy) || sourcePolicy.sbom_format!==format || sourcePolicy.dependency_registry!=='https://registry.npmjs.org/' || sourcePolicy.lockfile_version!==3 || sourcePolicy.source_lockfile!==lockPath || sourcePolicy.include_development_dependencies!==true) deny('Trusted dependency-source metadata is missing or unsupported.');
  if(lock.lockfileVersion!==sourcePolicy.lockfile_version || !object(lock.packages) || !object(lock.packages['']) || manifest.workspaces || lock.packages[''].workspaces || lock.packages[''].name!==manifest.name || lock.packages[''].version!==manifest.version) deny('Only a matching npm lockfile v3 reference workload is supported.');
  for(const field of ['dependencies','devDependencies','optionalDependencies','peerDependencies']) {
@@ -148,12 +149,13 @@ function verify(directory,ctx,expectedRevision) {
 /** @param {Record<string,string>} options */
 export async function releaseArtifact(options) {
  try {
-  const repo=resolve(options['--trusted-repo']??'.'),ctx=context(repo,options['--trusted-revision']);
+  const distribution=options['--consumer-repo']?distributionContext(options):undefined;
+  const repo=distribution?.consumerRepo??resolve(options['--trusted-repo']??'.'),sourceRevision=distribution?.sourceRevision??options['--trusted-revision'],ctx=context(repo,sourceRevision,distribution);
   if(options['--mode']==='produce' && options['--validation-evidence'] && options['--output-dir']) {
    const report=parseJson(regularFile(resolve(options['--validation-evidence'])).toString('utf8'));
    return produce(options['--output-dir'],ctx,report);
   }
-  if(options['--mode']==='verify' && options['--artifact-directory']) return verify(options['--artifact-directory'],ctx,options['--trusted-revision']);
+  if(options['--mode']==='verify' && options['--artifact-directory']) return verify(options['--artifact-directory'],ctx,sourceRevision);
   deny('Use produce with validation evidence and output directory, or verify with an artifact directory.');
  } catch(error) {
   return {operation:'release-artifact',outcome:'blocked',results:[{capability:'traceable-build-artifacts',required:true,status:'error',reason:error instanceof Error?error.message:'Artifact evidence is incomplete or unavailable.'}]};
