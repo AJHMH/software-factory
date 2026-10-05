@@ -160,6 +160,13 @@ if (command === 'promote' && args.length >= 5 && args.length % 2 === 1 && args.s
   publish(report);process.exit(report.outcome==='promoted'?0:1);
 }
 
+if (command === 'readiness' && args.length === 3 && args[1] === '--mode' && ['inspect', 'demonstrate'].includes(args[2])) {
+  const readiness = await import('./readiness.mjs');
+  const report = args[2] === 'inspect' ? readiness.inspectReadiness() : readiness.demonstrateReadiness();
+  publish(report);
+  process.exit(report.outcome === 'blocked' ? 1 : 0);
+}
+
 /** @param {{ operation: string, outcome: string, results: Array<{ capability: string, status: string, required: boolean, reason: string, trackingIssue?: number }> }} report */
 function publish(report) {
   if (process.env.GITHUB_STEP_SUMMARY) {

@@ -23,6 +23,13 @@ and [ADR 004](docs/adrs/004-reference-package-rollback.md).
 
 ## Versioned Factory consumers
 
+The public `readiness --mode inspect|demonstrate` operation runs controlled CLI
+scenarios separately from live GitHub readiness evidence. A passing demonstration
+does not certify publication, hosted promotion, runtime recovery or compliance.
+See [readiness](docs/governed-automation-readiness.md), the
+[operator guide](docs/OPERATING_MODEL.md) and
+[ADR 006](docs/adrs/006-readiness-evidence-boundaries.md).
+
 Factory distribution v1 exposes SHA-pinned reusable validation/certification
 workflows and a baseline policy pack. A consumer lock and independently selected
 repository variable must match the executing Factory revision. Consumer source

@@ -13,8 +13,9 @@ const sourceEvidenceName='source-evidence.json';
 const validationEvidenceName='validation-evidence.json';
 const maxFileSize=16*1024*1024;
 /** @typedef {Record<string, any>} Json */
+class ArtifactDenial extends Error {}
 /** @param {string} reason @returns {never} */
-function deny(reason) {throw new Error(reason);}
+function deny(reason) {throw new ArtifactDenial(reason);}
 /** @param {unknown} value @returns {value is Json} */
 function object(value) {return value!==null && typeof value==='object' && !Array.isArray(value);}
 /** @param {string|Buffer|Uint8Array} value */
@@ -158,6 +159,6 @@ export async function releaseArtifact(options) {
   if(options['--mode']==='verify' && options['--artifact-directory']) return verify(options['--artifact-directory'],ctx,sourceRevision);
   deny('Use produce with validation evidence and output directory, or verify with an artifact directory.');
  } catch(error) {
-  return {operation:'release-artifact',outcome:'blocked',results:[{capability:'traceable-build-artifacts',required:true,status:'error',reason:error instanceof Error?error.message:'Artifact evidence is incomplete or unavailable.'}]};
+  return {operation:'release-artifact',outcome:'blocked',results:[{capability:'traceable-build-artifacts',required:true,status:'error',reason:error instanceof ArtifactDenial?error.message:'Artifact evidence is incomplete, malformed, or unavailable; private diagnostics were redacted.'}]};
  }
 }

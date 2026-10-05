@@ -1,144 +1,17 @@
-# Factory capability inventory and operator guide
+# Factory Validation capabilities
 
-## Status and guarantees
+Use `node scripts/factory-validation.mjs inventory` for current implemented capabilities. `capability <name> --required` reports an available but unexecuted gate as `not-run` and exits nonzero. `certify` without required evidence fails closed. Availability never establishes passing validation, hosted approval or permission to mutate GitHub.
 
-The Factory provides truthful readiness reporting and executable contract validation
-for a Node 24 reference workload, plus scoped trusted execution-policy evaluation.
-Other required gates remain unsupported and
-optional mutation paths are disabled. This extends issue #2's safe baseline;
-it is not a Governed Automation readiness claim.
+| Operations | Implemented scope / procedure |
+| --- | --- |
+| `validate`, `profile`, `distribution` | [Contract execution](contract-execution.md) and [versioned consumers](factory-distribution.md) |
+| `policy`, `coverage`, `measure-coverage` | [Trusted policy](policy-evaluation.md) and [coverage](coverage-enforcement.md) |
+| `security`, `scan-security`, `sast`, `collect-sast` | [Secrets/dependencies](security-enforcement.md) and [CodeQL](sast-enforcement.md) |
+| `human-review`, `collect-reviews`, `governance`, `collect-governance`, `bootstrap-governance` | [Review](human-review.md) and [governance](repository-governance.md) |
+| `propose-change`, `prune-agent-evidence`, `remediate`, `local-remediate` | [Bounded proposals](bounded-agent-proposals.md), [remediation](authorized-remediation.md) and [local publication](local-remediation.md) |
+| `dependencies` | Governed update/evaluate/merge operations and [dependency policy](../policies/dependencies.yaml) |
+| `certify`, `release` | [Certification](release-certification.md) and [signed publication](versioned-releases.md); CLI release prepares only |
+| `promote`, `rollback`, `health-monitoring` | [Promotion](artifact-promotion.md), [package restoration](runbooks/deployment-rollback.md) and [monitoring](operations.md) |
+| `readiness --mode inspect\|demonstrate` | [Controlled demonstration and dated readiness gaps](governed-automation-readiness.md) |
 
-The public interface is `node scripts/factory-validation.mjs`:
-
-- `remediate` authorizes bounded JSON formatting fixes; local publication requires explicit digest approval. See [authorized remediation](authorized-remediation.md).
-- `inventory` reports all capabilities and exits 0; it does not approve delivery.
-- `propose-change` executes a controlled bounded fixture proposal in a private
-  workspace; `prune-agent-evidence` expires its evidence without resetting budgets.
-  See [bounded proposals](bounded-agent-proposals.md) for required authorization inputs.
-- `capability <name>` reports metadata and exits 0. Available execution reports
-  not-run; unsupported capabilities report unsupported. No gate has passed.
-- `capability <name> --required` exits 1 without executed evidence.
-- `profile` validates a contract and returns its selected runtime without execution.
-- `validate` executes the supported contract and exits 0 only if all commands pass.
-- `policy --trusted-revision <SHA>` evaluates contract execution limits against
-  committed trusted policy and approved exceptions; it does not execute commands.
-- `measure-coverage --base-revision <SHA> --trusted-revision <SHA>` runs the Node
-  coverage adapter and enforces trusted Quality policy on committed source snapshots.
-- `coverage --evidence <file> --base-revision <SHA> --trusted-revision <SHA>` evaluates
-  revision-bound coverage evidence without executing tests.
-- `scan-security --trusted-revision <SHA>` scans committed source with pinned scanners.
-- `security --trusted-revision <SHA> --evidence <file>` evaluates redacted security evidence.
-- `collect-sast --trusted-revision <SHA> --repository <owner/repo> --ref <ref>` retrieves
-  and evaluates exact-revision native CodeQL evidence.
-- `sast --trusted-revision <SHA> --evidence <file>` evaluates CodeQL severity evidence.
-- `human-review --trusted-revision <SHA> --base-revision <SHA> --repository <owner/repo>
-  --pull-request <number> --evidence <file>` evaluates current independent approvals.
-- `collect-reviews` accepts the same revision/PR context and reads live GitHub reviews;
-  `--coverage-evidence github --output <file>` collects workload comparison artifacts.
-- `certify` reports all mandatory release capabilities and always exits 1 with a
-  `blocked` outcome. There is no publication or deployment step.
-- `collect-governance --repository <owner/repo> --trusted-revision <SHA>` reports
-  live ruleset drift; `governance --evidence <file>` inspects a supplied snapshot.
-- `bootstrap-governance` accepts the same repository/revision and requires
-  explicit `--apply true` to configure the managed default-branch ruleset.
-- `health-monitoring --repository <owner/repo> --workload-id <id> --state-file <file>`
-  probes `FACTORY_HEALTH_ENDPOINT`, persists consecutive-failure state, and uses
-  GitHub Issues for thresholded incident/recovery notifications. It requires a
-  configured HTTPS endpoint and a token with `issues: write` when an incident is
-  created or recovered.
-- Unknown commands, names, flags, or extra arguments exit 2 without a success report.
-
-`rollback --mode evaluate|apply` consumes fresh deployment-correlated health evidence
-and retained reference packages under pinned policy. It restores compatible bytes,
-verifies recovery of package identity, prevents repeated attempts, and escalates
-unsafe or unsupported restoration. See the [rollback runbook](runbooks/deployment-rollback.md)
-for required inputs and the reference/runtime boundary. No automatic hosted rollback
-or endpoint recovery claim is enabled by this operation.
-
-Reports contain schema version, operation, outcome, and capability results with
-status, request requirement, release requirement, reason, and tracking issue.
-When GitHub provides a step-summary file, the same report is appended as an operator
-summary. A successful reporting job is never a passing workload check.
-
-## Inventory
-
-| Capability | Status | Mandatory for release | Next implementation |
-| --- | --- | --- | --- |
-| contract-validation | available; evidence requires execution | yes | #3 implemented; release evidence integration follows |
-| policy-review | available for execution limits | yes | #4 implemented; #9/#14: hosted protections and certification |
-| coverage | available; actual measurement/evaluation required | yes | #5 implemented; #9/#14: hosted protections and certification |
-| secret-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
-| dependency-scanning | available; executed evidence required | yes | #6 implemented; #9/#14: protection and certification |
-| sast-policy | available; actual native analysis/evaluation required | yes | #7 implemented; #9/#14: governance and certification |
-| human-review | available; current independent approval evidence required | yes | #8 implemented; #9: trusted workflow and merge boundary |
-| repository-governance | available; live configuration inspection required | yes | #9: protection bootstrap and drift; see entitlement limits |
-| bounded-agent-proposal | available; controlled fixture only | no | #10: audited broker; #11: remediation integration |
-| release-certification | unsupported | yes | #14: Exact-revision certification |
-| agent-remediation | available for JSON formatting; local operator gate | no | #11: Authorized remediation and live evidence |
-| dependency-automation | unsupported; updates/merges disabled | no | #12: Governed dependency updates |
-| health-monitoring | available; HTTPS endpoint probes, deduplicated GitHub incidents/recovery, and retained evidence | no | #18: Safe deployment rollback; external paging and non-GitHub alert adapters remain unsupported |
-| artifact-rollback | available; operator-driven retained reference package restoration and escalation | no | #18: implemented locally; runtime adapters and hosted rollback remain unsupported |
-| release-publication | unsupported; publication/deployment disabled | no | #15/#16: Publication and deployment |
-
-See [contract execution](contract-execution.md) for schema, runtime, shell,
-timeouts, revision metadata, and example workload.
-The release-required list is a fixed conservative baseline. See
-[trusted policy evaluation](policy-evaluation.md) for the versioned execution pack,
-profile precedence, and approved exceptions. Other YAML policy declarations are
-not enforced by this interface; changing a policy cannot enable a missing capability.
-
-## GitHub workflow behavior
-
-Factory validation workflows use `contents: read`; hosted remediation only authorizes requests and holds no write credentials. Health monitoring separately receives `actions: read` and `issues: write` for retained state and incident tracking. SAST also uses `security-events: read`.
-Human Review also reads pull requests and Actions coverage artifacts.
-Checkout credential persistence is disabled and workflows have bounded job timeouts.
-No workflow approves or merges PRs, publishes packages/releases, deploys, or rolls
-back workloads.
-
-CI installs Factory tools, selects the supported runtime from the validated
-contract, and executes the reference workload. Security runs pinned scanners;
-Human Review evaluates current independent reviewers and sensitive changes. Release
-Certification remains blocked and intentionally fails. A separate CI job runs template tests and
-typechecking; its success must not replace workload-required checks in repository
-protections. Dependency automation updates proposals; health monitoring probes the
-configured `FACTORY_HEALTH_ENDPOINT` every five minutes on a best-effort schedule.
-GitHub Issues are the only implemented alert channel. Health checks do not perform
-rollback or remediation. Remediation supports authorized manual/comment/dispatch
-requests; publication is local, explicitly gated, and described in
-[local remediation](local-remediation.md).
-
-The new Trusted Policy workflow reads evaluator and policy from the base revision,
-with candidate files used as data only. It requires governance-approved bootstrap
-before it can operate in GitHub; its green result is execution-policy evidence only.
-
-GitHub-native CodeQL and code quality checks are enabled. Factory secret/dependency
-scans supplement GitHub signals with explicit tool-version and revision evidence.
-GitHub's security policy, Dependabot alerts, code scanning alerts, and secret
-scanning alerts are the selected review sources; CodeRabbit is not required.
-See [security review sources and hosted status](security.md). Selecting GitHub
-does not make disabled or unimplemented scanning gates pass.
-
-Before adopting the template, configure repository protections to require actual
-workload gates and read the reports. This repository does not provision or verify
-hosted protections yet (#9); a failing workflow alone does not prevent GitHub merges
-unless the repository requires it. Do not resolve intentional failures by bypassing
-checks or replacing unsupported results with success messages.
-
-## Verification and enabling future capabilities
-
-Tests invoke the public CLI and exercise commands extracted from the YAML workflow
-fixtures, checking permissions, safe steps, exit codes, JSON outcomes, and GitHub
-summary output. These local fixtures do not emulate GitHub token restrictions,
-branch rules, or hosted events; those require a dedicated integration repository.
-
-Future tickets must implement each gate, demonstrate successful and denied behavior,
-and supply revision-bound evidence before restoring privileged jobs. Changing labels,
-policy declarations, persona instructions, or capability messages alone is not an
-enablement mechanism. Preserve separate read-only validation and authorized write
-jobs as capabilities are implemented.
-
-## Interim PR integration reporting
-
-Factory security jobs run evaluated gates. Incomplete review jobs report unavailable
-status without failing PRs. GitHub-native protections remain active; release certification remains
-blocked. See [the restoration plan](governance-follow-ups.md) for tracked follow-up tickets.
+Mutating operations require documented authorization and exact evidence. Metadata cannot authorize them. Agent adapters are controlled fixtures; unrestricted tools and real provider billing are unsupported. Promotion/rollback use the filesystem reference package adapter. Runtime recovery is unsupported. The readiness report distinguishes implementation, local proof and live evidence.
