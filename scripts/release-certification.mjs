@@ -56,6 +56,7 @@ export async function certifyRelease(options, dependencies = {}) {
     if (git(trustedRepo, ['cat-file', '-t', trusted]) !== 'commit') throw new Error('Trusted policy revision must identify a commit.');
     /** @param {string} path */ const policyFile = (path) => git(trustedRepo, ['show', `${trusted}:${path}`]);
     const governancePolicy = parse(policyFile('policies/governance.yaml'))?.governance?.repository_protection;
+    if (distribution && Array.isArray(governancePolicy?.required_checks)) governancePolicy.required_checks=governancePolicy.required_checks.map((/** @type {{context:string,integration_id:number}} */ check)=>({...check,context:'validation / '+check.context}));
     const humanPolicy = parse(policyFile('policies/human-review.yaml'))?.human_review;
     const quality = parse(policyFile('policies/quality.yaml'))?.quality?.release_readiness;
     const dependencyPolicy = parse(policyFile('policies/dependencies.yaml'))?.dependencies;
@@ -106,7 +107,7 @@ export async function certifyRelease(options, dependencies = {}) {
       const permission = await github(`${apiPrefix}/collaborators/${encodeURIComponent(approval.user.login)}/permission`, fetchImpl);
       if (!['write', 'maintain', 'admin'].includes(permission.permission)) throw new Error('A counted reviewer does not have write access required by repository protection.');
     }
-    const governance = /** @type {Json} */ (dependencies.collectGovernance ? await dependencies.collectGovernance(repository, trusted, trustedRepo) : await collectGovernance({ '--repository': repository, '--trusted-revision': trusted, '--trusted-repo': trustedRepo }));
+    const governance = /** @type {Json} */ (dependencies.collectGovernance ? await dependencies.collectGovernance(repository, trusted, trustedRepo) : await collectGovernance({ ...options, '--repository': repository, '--trusted-revision': trusted, '--trusted-repo': trustedRepo }));
     if (governance.outcome !== 'passed' || governance.enforcementEvidence !== 'live GitHub ruleset configuration; runtime authorization is not certified') throw new Error('Live GitHub repository protections do not satisfy trusted Governance policy.');
     const openDefects = { critical: 0, high: 0, medium: 0, low: 0 };
     for (const issue of issueData.filter((/** @type {Json} */ item) => !item.pull_request && (item.labels ?? []).some((/** @type {Json} */ label) => label.name === 'defect'))) {

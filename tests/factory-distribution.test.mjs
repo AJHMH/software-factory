@@ -21,6 +21,7 @@ function fixture(t) {
   for (const path of ['factory-distribution.yaml', 'profiles/workloads.yaml', ...['enforcement','governance','human-review','quality','security','dependencies'].map(name => `policies/${name}.yaml`)]) {
     mkdirSync(join(factory, path, '..'), { recursive: true }); copyFileSync(join(root, path), join(factory, path));
   }
+  const fixtureManifest=parse(readFileSync(join(factory,'factory-distribution.yaml'),'utf8'));fixtureManifest.version='1.0.0';writeFileSync(join(factory,'factory-distribution.yaml'),stringify(fixtureManifest));
   git(factory, 'init'); const revision = commit(factory);
   const lock = { schema_version: 1, factory: { repository: 'AJHMH/software-factory', revision, version: '1.0.0', profile: 'node-24', policy_pack: 'baseline-1' } };
   const contract = { version: '1.0', contract: { workload_id: 'second-workload', profile: 'node-24', working_directory: 'workload', commands: Object.fromEntries(['install','validate','test','build'].map(name => [name, { run: `node step.mjs ${name}`, timeout_seconds: 10 }])) } };
@@ -48,6 +49,7 @@ test('public distribution interface verifies an immutable consumer adoption with
   assert.equal(result.report.factory.revision, f.revision);
   assert.match(result.report.factory.policyDigest, /^[a-f0-9]{64}$/);
   assert.equal(result.report.workloadId, 'second-workload');
+  assert.match(result.report.policy.evidenceDigest,/^[a-f0-9]{64}$/);
 });
 
 test('consumer validation enforces pinned policy and propagates a failed workload gate', t => {
@@ -120,4 +122,15 @@ test('consumer artifacts bind separate source history to pinned Factory policy a
   assert.equal(verified.report.revision, validation.revision);
   assert.notEqual(verified.report.revision, f.revision);
   assert.equal(verified.report.dependencySource.lockfile, 'workload/package-lock.json');
+});
+
+test('consumer governance requires every baseline check under the real reusable validation namespace', t => {
+  const f=fixture(t);
+  const policy=parse(readFileSync(join(root,'policies/governance.yaml'),'utf8')).governance.repository_protection;
+  const checks=policy.required_checks.map(check=>({...check,context:'validation / '+check.context}));
+  const snapshot={repository:'owner/consumer',default_branch:'main',rulesets:[{name:'Factory governed default branch',target:'branch',enforcement:'active',bypass_actors:[],conditions:{ref_name:{include:['~DEFAULT_BRANCH'],exclude:[]}},rules:[...['deletion','non_fast_forward','required_signatures','required_linear_history'].map(type=>({type})),{type:'pull_request',parameters:{required_approving_review_count:1,dismiss_stale_reviews_on_push:true,required_review_thread_resolution:true}},{type:'required_status_checks',parameters:{strict_required_status_checks_policy:true,do_not_enforce_on_create:false,required_status_checks:checks}}]}]};
+  const file=join(f.consumer,'tmp/governance.json');mkdirSync(join(f.consumer,'tmp'));writeFileSync(file,JSON.stringify(snapshot));
+  const run=()=>spawnSync(process.execPath,[cli,'governance','--repository','owner/consumer','--evidence',file,...Object.entries(f.options).filter(([key])=>key !== '--mode').flat()],{encoding:'utf8'});
+  const passed=run();assert.equal(passed.status,0,passed.stdout+passed.stderr);
+  checks.pop();writeFileSync(file,JSON.stringify(snapshot));assert.equal(run().status,1,'all baseline checks remain mandatory');
 });

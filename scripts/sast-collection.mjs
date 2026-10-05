@@ -24,11 +24,13 @@ export async function collectSast(options) {
     const context=sastContext(options), repository=options['--repository'], ref=options['--ref'];
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '') || !/^refs\/(pull\/[0-9]+\/head|heads\/[A-Za-z0-9._/-]+)$/.test(ref ?? '')) throw new Error('Repository and exact source ref required.');
     /** @type {Metadata | undefined} */ let selected;
+    const analysisKey=options['--analysis-key'];
+    if (analysisKey && !context.codeql.analysis_keys.includes(analysisKey)) throw new Error('Unapproved analysis identity.');
     const deadline=Date.now()+240000;
     while (!selected) {
       const analyses=/** @type {Metadata[]} */(await api(`repos/${repository}/code-scanning/analyses?ref=${encodeURIComponent(ref)}&tool_name=CodeQL&per_page=100`));
       if (!Array.isArray(analyses)) throw new Error('Malformed analysis list.');
-      selected=analyses.find(analysis=>analysis.commit_sha === context.revision && analysis.ref === ref && analysis.category === context.codeql.category && analysis.analysis_key === 'dynamic/github-code-scanning/codeql:analyze' && analysis.tool.name === 'CodeQL');
+      selected=analyses.find(analysis=>analysis.commit_sha === context.revision && analysis.ref === ref && analysis.category === context.codeql.category && (analysisKey ? analysis.analysis_key === analysisKey : context.codeql.analysis_keys.includes(analysis.analysis_key)) && analysis.tool.name === 'CodeQL');
       if (!selected) {
         if (Date.now() >= deadline) throw new Error('No completed analysis for the exact revision.');
         await new Promise(resolve=>setTimeout(resolve,10000));

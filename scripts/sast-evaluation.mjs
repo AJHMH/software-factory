@@ -20,8 +20,10 @@ export function sastContext(options) {
   const pack=parse(profileSource);
   if (pack?.version !== '1.0' || !Array.isArray(pack.profiles) || pack.profiles.length !== 1 || Object.keys(pack).some(key=>!['version','profiles'].includes(key))) throw new Error('Invalid trusted CodeQL profile pack.');
   const profile=pack.profiles[0];
-  if (profile.id !== context.contract.profile || profile.language !== 'javascript-typescript' || profile.build_mode !== 'none' || profile.category !== '/language:javascript-typescript' || Object.keys(profile).some(key=>!['id','language','build_mode','category'].includes(key))) throw new UnsupportedSecurityCapability('Unsupported CodeQL profile.');
-  return {...context,codeql:profile,block:/** @type {string[]} */(policy.block_on_severity),warn:/** @type {string[]} */(policy.warn_on_severity),sastPolicyDigest:digest(source),profileDigest:digest(profileSource)};
+  if (profile.id !== context.contract.profile || profile.language !== 'javascript-typescript' || profile.build_mode !== 'none' || profile.category !== '/language:javascript-typescript' || Object.keys(profile).some(key=>!['id','language','build_mode','category','analysis_keys'].includes(key))) throw new UnsupportedSecurityCapability('Unsupported CodeQL profile.');
+  const analysisKeys=profile.analysis_keys ?? ['dynamic/github-code-scanning/codeql:analyze'];
+  if (!Array.isArray(analysisKeys) || !analysisKeys.length || analysisKeys.length > 10 || new Set(analysisKeys).size !== analysisKeys.length || analysisKeys.some(key=>typeof key !== 'string' || !/^(?:dynamic\/github-code-scanning\/codeql:analyze|\.github\/workflows\/[A-Za-z0-9_-]+\.ya?ml:[A-Za-z0-9_-]+)$/.test(key))) throw new Error('Invalid trusted CodeQL analysis identities.');
+  return {...context,codeql:{...profile,analysis_keys:analysisKeys},block:/** @type {string[]} */(policy.block_on_severity),warn:/** @type {string[]} */(policy.warn_on_severity),sastPolicyDigest:digest(source),profileDigest:digest(profileSource)};
 }
 
 /** @param {'error'|'unsupported'} status @param {string} reason */

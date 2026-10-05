@@ -40,7 +40,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
       - name: Install pinned Factory tools
         working-directory: factory
         run: npm ci --ignore-scripts
@@ -51,11 +51,7 @@ jobs:
           FACTORY_REVISION: ${{ job.workflow_sha }}
           APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
           SOURCE_REVISION: ${{ inputs.source_revision }}
-        run: >-
-          node scripts/factory-validation.mjs distribution --mode inspect
-          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
-          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
-          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
       - name: Execute consumer workload with no certification credentials
         working-directory: factory
         env:
@@ -63,12 +59,7 @@ jobs:
           FACTORY_REVISION: ${{ job.workflow_sha }}
           APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
           SOURCE_REVISION: ${{ inputs.source_revision }}
-        run: >-
-          node scripts/factory-validation.mjs distribution --mode validate
-          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
-          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
-          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
-          --output tmp/distribution.json
+        run: node scripts/factory-validation.mjs distribution --mode validate --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION" --output tmp/distribution.json
       - name: Extract exact validation evidence
         working-directory: factory
         run: node -e "const fs=require('node:fs');const r=JSON.parse(fs.readFileSync('tmp/distribution.json'));fs.writeFileSync('tmp/validation.json',JSON.stringify(r.validation))"
@@ -79,12 +70,7 @@ jobs:
           FACTORY_REVISION: ${{ job.workflow_sha }}
           APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
           SOURCE_REVISION: ${{ inputs.source_revision }}
-        run: >-
-          node scripts/factory-validation.mjs release-artifact --mode produce
-          --trusted-repo . --trusted-revision "$FACTORY_REVISION"
-          --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION"
-          --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
-          --validation-evidence tmp/validation.json --output-dir ../consumer/tmp/release-artifact
+        run: node scripts/factory-validation.mjs release-artifact --mode produce --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION" --validation-evidence tmp/validation.json --output-dir ../consumer/tmp/release-artifact
       - name: Retain source-bound consumer package
         uses: actions/upload-artifact@v4
         with:
@@ -99,5 +85,491 @@ jobs:
         with:
           name: factory-adoption-${{ inputs.source_revision }}-${{ github.run_id }}
           path: factory/tmp/distribution.json
+          if-no-files-found: warn
+          retention-days: 90
+  context:
+    name: Resolve exact consumer review context
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      base: ${{ steps.context.outputs.base }}
+      head: ${{ steps.context.outputs.head }}
+      pull: ${{ steps.context.outputs.pull }}
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - id: context
+        working-directory: factory
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE: ${{ inputs.source_revision }}
+          PULL: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          EVENT_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |-
+          set -euo pipefail
+          [[ "$SOURCE" == "$EVENT_SOURCE" ]]
+          mkdir -p tmp
+          if [[ "$EVENT" == pull_request ]]; then
+            [[ "$PULL" =~ ^[1-9][0-9]*$ ]]
+            gh api "repos/$REPOSITORY/pulls/$PULL" > tmp/pull.json
+            jq -e --arg source "$SOURCE" --arg repo "$REPOSITORY" '.state == "open" and .head.sha == $source and .head.repo.full_name == $repo and .base.repo.full_name == $repo and .base.ref == "main"' tmp/pull.json >/dev/null
+            BASE=$(jq -r '.base.sha' tmp/pull.json)
+          else
+            [[ "$EVENT" == push && "$REF" == refs/heads/main ]]
+            gh api "repos/$REPOSITORY/commits/$SOURCE/pulls?per_page=100" > tmp/pulls.json
+            jq -e --arg source "$SOURCE" --arg repo "$REPOSITORY" 'if length >= 100 then error("Incomplete PR page") else [.[] | select(.merged_at != null and .merge_commit_sha == $source and .base.ref == "main" and .base.repo.full_name == $repo and .head.repo.full_name == $repo)] | if length == 1 then .[0] else error("Ambiguous merged PR") end end' tmp/pulls.json > tmp/pull.json
+            BASE=$(git -C ../consumer rev-parse "$SOURCE^1")
+          fi
+          HEAD=$(jq -r '.head.sha' tmp/pull.json)
+          PULL=$(jq -r '.number' tmp/pull.json)
+          [[ "$BASE" =~ ^[a-f0-9]{40}$ && "$HEAD" =~ ^[a-f0-9]{40}$ && "$PULL" =~ ^[1-9][0-9]*$ ]]
+          printf 'base=%s
+          head=%s
+          pull=%s
+          ' "$BASE" "$HEAD" "$PULL" >> "$GITHUB_OUTPUT"
+  policy:
+    name: Evaluate trusted execution policy
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - name: Enforce pinned Factory gate
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+          SOURCE: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL: ${{ needs.context.outputs.pull }}
+          EVENT: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+        run: node scripts/factory-validation.mjs policy --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml > tmp/gates/policy.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-policy-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/gates
+          if-no-files-found: warn
+          retention-days: 90
+  safety:
+    name: Verify Factory safety controls
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - name: Enforce pinned Factory gate
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+          SOURCE: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL: ${{ needs.context.outputs.pull }}
+          EVENT: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+        run: npm run typecheck && npm test
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-safety-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/gates
+          if-no-files-found: warn
+          retention-days: 90
+  coverage:
+    name: Enforce Factory coverage
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - name: Enforce pinned Factory gate
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+          SOURCE: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL: ${{ needs.context.outputs.pull }}
+          EVENT: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+        run: node scripts/factory-validation.mjs measure-coverage --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --output tmp/gates/coverage-evidence.json > tmp/gates/coverage.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-coverage-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/gates
+          if-no-files-found: warn
+          retention-days: 90
+  security:
+    name: Enforce Factory secret and dependency policy
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - working-directory: factory
+        run: node scripts/install-security-tools.mjs
+      - name: Enforce pinned Factory gate
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+          SOURCE: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL: ${{ needs.context.outputs.pull }}
+          EVENT: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+        run: node scripts/factory-validation.mjs scan-security --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --tools-dir tmp/security-tools/installed --output tmp/gates/security-evidence.json > tmp/gates/security.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-security-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/gates
+          if-no-files-found: warn
+          retention-days: 90
+  sast:
+    name: Enforce Factory SAST policy
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: read
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_revision }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ inputs.source_revision }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - name: Enforce pinned Factory gate
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+          SOURCE: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL: ${{ needs.context.outputs.pull }}
+          EVENT: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/factory-validation.mjs collect-sast --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --repository "$REPOSITORY" --ref "$SOURCE_REF" --analysis-key .github/workflows/factory-codeql.yml:analyze --output tmp/gates/sast-evidence.json > tmp/gates/sast.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-sast-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/gates
+          if-no-files-found: warn
+          retention-days: 90
+  human:
+    name: Enforce Factory human approval
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.context.outputs.head }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ needs.context.outputs.head }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+        run: node scripts/factory-validation.mjs measure-coverage --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --output tmp/gates/coverage-evidence.json > tmp/gates/head-coverage.json
+      - name: Enforce pinned Factory gate
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+          SOURCE: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL: ${{ needs.context.outputs.pull }}
+          EVENT: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+        run: |-
+          if [[ "$EVENT" == push ]]; then MERGED=(--merged-revision "$SOURCE"); else MERGED=(); fi
+          node scripts/factory-validation.mjs collect-reviews --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --repository "$REPOSITORY" --pull-request "$PULL" --coverage-evidence tmp/gates/coverage-evidence.json "${MERGED[@]}" --output tmp/gates/review-evidence.json > tmp/gates/human_review.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-human-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/gates
+          if-no-files-found: warn
+          retention-days: 90
+  trusted-human:
+    name: Enforce Factory trusted human approval
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.context.outputs.head }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ needs.context.outputs.head }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+        run: node scripts/factory-validation.mjs measure-coverage --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --output tmp/gates/coverage-evidence.json > tmp/gates/head-coverage.json
+      - name: Enforce pinned Factory gate
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+          SOURCE: ${{ inputs.source_revision }}
+          REPOSITORY: ${{ github.repository }}
+          PULL: ${{ needs.context.outputs.pull }}
+          EVENT: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+        run: |-
+          if [[ "$EVENT" == push ]]; then MERGED=(--merged-revision "$SOURCE"); else MERGED=(); fi
+          node scripts/factory-validation.mjs collect-reviews --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --repository "$REPOSITORY" --pull-request "$PULL" --coverage-evidence tmp/gates/coverage-evidence.json "${MERGED[@]}" --output tmp/gates/review-evidence.json > tmp/gates/human_review.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-trusted-human-${{ inputs.source_revision }}-${{ github.run_id }}
+          path: factory/tmp/gates
           if-no-files-found: warn
           retention-days: 90

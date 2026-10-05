@@ -111,13 +111,14 @@ test('the live collector enforces GitHub identities, permissions, pagination and
           const review={id:101,user:{login:'reviewer',type:fixture.mode === 'bot' ? 'Bot' : 'User'},state:'APPROVED',commit_id:fixture.mode === 'stale' ? 'a'.repeat(40) : fixture.revision,submitted_at:'2026-10-01T00:00:00Z'};
           data=page === 1 ? Array.from({length:100},(_,index)=>({...review,id:index+1,state:'COMMENTED'})) : [review];
         } else if(url.pathname.endsWith('/permission')) data={permission:fixture.mode === 'read-only' ? 'read' : 'write'};
-        else {requests++;data={state:'open',head:{sha:fixture.mode === 'race' && requests > 1 ? 'b'.repeat(40) : fixture.revision},base:{sha:fixture.base,repo:{full_name:'owner/repo'}},user:{login:'author'}};}
+        else {requests++;data={state:fixture.mode === 'merged' ? 'closed' : 'open',merged:fixture.mode === 'merged',merge_commit_sha:fixture.revision,head:{sha:fixture.mode === 'race' && requests > 1 ? 'b'.repeat(40) : fixture.revision},base:{sha:fixture.base,repo:{full_name:'owner/repo'}},user:{login:'author'}};}
         return new Response(JSON.stringify(data),{status:200});
       };`);
-    const result=spawnSync(process.execPath,['--import',pathToFileURL(join(f.repo,'api-preload.mjs')).href,cli,'collect-reviews','--trusted-revision',f.base,'--base-revision',f.base,'--contract',join(f.repo,'factory-contract.yaml'),'--repository','owner/repo','--pull-request','1'],{cwd:root,encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'fixture-not-a-secret',GITHUB_STEP_SUMMARY:''}});
+    const result=spawnSync(process.execPath,['--import',pathToFileURL(join(f.repo,'api-preload.mjs')).href,cli,'collect-reviews',...(mode === 'merged' ? ['--merged-revision',f.evidence.revision] : []),'--trusted-revision',f.base,'--base-revision',f.base,'--contract',join(f.repo,'factory-contract.yaml'),'--repository','owner/repo','--pull-request','1'],{cwd:root,encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'fixture-not-a-secret',GITHUB_STEP_SUMMARY:''}});
     assert.ok(result.stdout,result.stderr);
     return {...result,report:JSON.parse(result.stdout)};
   };
   assert.equal(execute('human').status,0,'approval on the second page is evaluated');
+  assert.equal(execute('merged').status,0,'merged source binds current live approval to its original head and baseline');
   for(const mode of ['bot','stale','read-only','race']) assert.equal(execute(mode).status,1,mode);
 });

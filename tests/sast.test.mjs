@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, realpathSync } from 'node:fs';
 import { join, relative, sep, isAbsolute } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 
@@ -54,4 +54,20 @@ test('candidate severity policy cannot authorize its own prohibited findings',t=
   const revision=f.git('rev-parse','HEAD');f.evidence.revision=revision;f.evidence.tree_digest=f.git('rev-parse','HEAD^{tree}');f.evidence.analyses[0].revision=revision;
   f.evidence.analyses[0].findings=[{rule:'js/command-line-injection',severity:'high',path:'workload/index.mjs',line:1,help_url:'https://codeql.github.com/codeql-query-help/javascript/js-command-line-injection/'}];
   assert.equal(f.run().status,1);
+});
+
+test('public SAST collector accepts only an advanced analysis identity selected by trusted profile', t => {
+  const f=fixture(t);
+  mkdirSync(join(f.repo,'profiles'));
+  f.write('profiles/codeql.yaml', 'version: "1.0"\nprofiles:\n  - id: node-24\n    language: javascript-typescript\n    build_mode: none\n    category: /language:javascript-typescript\n    analysis_keys: [".github/workflows/codeql.yml:analyze"]\n');
+  f.git('add','.');f.git('-c','commit.gpgsign=false','-c','user.name=Test','-c','user.email=test@example.invalid','commit','-m','trusted profile');
+  const revision=f.git('rev-parse','HEAD'), preload=join(f.repo,'api.mjs');
+  const metadata={id:123,commit_sha:revision,ref:'refs/heads/main',category:'/language:javascript-typescript',analysis_key:'.github/workflows/codeql.yml:analyze',tool:{name:'CodeQL',version:'2.27.1'},error:'',warning:'',rules_count:1,results_count:0};
+  const sarif={version:'2.1.0',runs:[{tool:{driver:{name:'CodeQL',semanticVersion:'2.27.1',rules:[{id:'js/test'}]}},results:[],versionControlProvenance:[{revisionId:revision,repositoryUri:'https://github.com/AJHMH/software-factory'}]}]};
+  f.write('api.mjs',`globalThis.fetch=async url=>new Response(JSON.stringify(String(url).includes('analyses/123')?${JSON.stringify(sarif)}:[${JSON.stringify(metadata)}]),{status:200});`);
+  const result=spawnSync(process.execPath,['--import',pathToFileURL(preload).href,cli,'collect-sast','--trusted-revision',revision,'--trusted-repo',f.repo,'--contract',join(f.repo,'factory-contract.yaml'),'--repository','AJHMH/software-factory','--ref','refs/heads/main','--analysis-key','.github/workflows/codeql.yml:analyze'],{cwd:root,encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'fixture-token',GITHUB_STEP_SUMMARY:''},timeout:10000});
+  assert.equal(result.status,0,result.stdout || result.stderr);
+  assert.equal(JSON.parse(result.stdout).outcome,'passed');
+  const denied=spawnSync(process.execPath,['--import',pathToFileURL(preload).href,cli,'collect-sast','--trusted-revision',revision,'--trusted-repo',f.repo,'--contract',join(f.repo,'factory-contract.yaml'),'--repository','AJHMH/software-factory','--ref','refs/heads/main','--analysis-key','.github/workflows/unapproved.yml:analyze'],{cwd:root,encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'fixture-token',GITHUB_STEP_SUMMARY:''}});
+  assert.equal(denied.status,1);assert.equal(JSON.parse(denied.stdout).outcome,'blocked');
 });

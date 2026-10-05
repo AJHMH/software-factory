@@ -304,3 +304,22 @@ test('hosted remediation authorizes requests with no publisher, secret, or write
  for(const step of auth.steps) {assert.equal(step['continue-on-error'],undefined);assert.ok(!step.run?.includes('${{'));if(step.uses==='actions/checkout@v4') assert.equal(step.with['persist-credentials'],false);}
  assert.ok(!JSON.stringify(workflow).includes('secrets.'));assert.ok(auth.steps.at(-1).run.includes('remediate --mode authorize'));
 });
+
+test('consumer reusable gates retain all baseline checks and isolate certification credentials from executable workloads', () => {
+ const workflow=parse(readFileSync(join(root,'.github/workflows/factory-consumer-validation.yml'),'utf8'));
+ const expected=['Execute Factory Contract Validation','Verify Factory safety controls','Evaluate trusted execution policy','Enforce Factory coverage','Enforce Factory secret and dependency policy','Enforce Factory SAST policy','Enforce Factory human approval','Enforce Factory trusted human approval'];
+ assert.deepEqual(expected.filter(name=>!Object.values(workflow.jobs).some(job=>job.name===name)),[]);
+ for(const job of Object.values(workflow.jobs)) {
+   assert.equal(job['continue-on-error'],undefined);
+   assert.ok(!JSON.stringify(job).includes('secrets.'));
+   for(const step of job.steps) if(step.uses==='actions/checkout@v4') assert.equal(step.with['persist-credentials'],false);
+ }
+ for(const gate of ['coverage','security','safety','policy','validation']) assert.ok(!JSON.stringify(workflow.jobs[gate]).includes('FACTORY_GITHUB_TOKEN'));
+ for(const gate of ['human','trusted-human']) {
+   assert.equal(workflow.jobs[gate].permissions['pull-requests'],'read');
+   const tokenStep=workflow.jobs[gate].steps.find(step=>step.env?.FACTORY_GITHUB_TOKEN);
+   assert.match(tokenStep.run,/collect-reviews/);assert.ok(!tokenStep.run.includes('measure-coverage'));
+ }
+ assert.equal(workflow.jobs.sast.permissions['security-events'],'read');
+ assert.match(workflow.jobs.sast.steps.find(step=>step.env?.FACTORY_GITHUB_TOKEN).run,/--analysis-key .github\/workflows\/factory-codeql.yml:analyze/);
+});

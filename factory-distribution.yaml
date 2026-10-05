@@ -1,5 +1,5 @@
 schema_version: 1
-version: 1.0.0
+version: 1.0.1
 contract_version: '1.0'
 policy_pack: baseline-1
 profiles:
