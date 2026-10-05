@@ -8,6 +8,7 @@ Use `node scripts/factory-validation.mjs inventory` for current implemented capa
 | `policy`, `coverage`, `measure-coverage` | [Trusted policy](policy-evaluation.md) and [coverage](coverage-enforcement.md) |
 | `security`, `scan-security`, `sast`, `collect-sast` | [Secrets/dependencies](security-enforcement.md) and [CodeQL](sast-enforcement.md) |
 | `human-review`, `collect-reviews`, `governance`, `collect-governance`, `bootstrap-governance` | [Review](human-review.md) and [governance](repository-governance.md) |
+| `refresh-approvals` | [Trusted automatic refresh](approval-refresh.md) of existing approval jobs; no approval verdict or replacement check |
 | `propose-change`, `prune-agent-evidence`, `remediate`, `local-remediate` | [Bounded proposals](bounded-agent-proposals.md), [remediation](authorized-remediation.md) and [local publication](local-remediation.md) |
 | `dependencies` | Governed update/evaluate/merge operations and [dependency policy](../policies/dependencies.yaml) |
 | `certify`, `release` | [Certification](release-certification.md) and [signed publication](versioned-releases.md); CLI release prepares only |

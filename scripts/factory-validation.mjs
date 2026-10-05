@@ -117,6 +117,12 @@ const capabilities = {
 const args = process.argv.slice(2);
 const [command, capability, requiredFlag] = args;
 
+if (command === 'refresh-approvals' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg, index) => index % 2 === 1 || ['--mode', '--repository', '--trigger-run', '--trusted-repo', '--trusted-revision'].includes(arg)) && new Set(args.filter((_, index) => index % 2 === 1)).size === (args.length - 1) / 2) {
+  const options = Object.fromEntries(Array.from({ length: (args.length - 1) / 2 }, (_, index) => [args[index * 2 + 1], args[index * 2 + 2]]));
+  const report = await (await import('./approval-refresh.mjs')).refreshApprovals(options);
+  publish(report); process.exit(report.outcome === 'blocked' ? 1 : 0);
+}
+
 if (command === 'distribution' && args.length >= 3 && args.length % 2 === 1 && args.slice(1).every((arg,index)=>index % 2 === 1 || ['--mode','--trusted-repo','--trusted-revision','--factory-repository','--approved-revision','--consumer-repo','--source-revision','--output'].includes(arg)) && new Set(args.filter((_,index)=>index % 2 === 1)).size === (args.length-1)/2) {
   const options=Object.fromEntries(Array.from({length:(args.length-1)/2},(_,i)=>[args[i*2+1],args[i*2+2]]));
   const report=await (await import('./factory-distribution.mjs')).distributeFactory(options);

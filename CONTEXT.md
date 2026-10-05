@@ -23,6 +23,12 @@ and [ADR 004](docs/adrs/004-reference-package-rollback.md).
 
 ## Versioned Factory consumers
 
+Required approval jobs can be refreshed after review events through a read-only
+observer and a trusted-base worker. The worker reruns existing validators without
+granting approval or bypassing protections. See
+[approval refresh](docs/approval-refresh.md) and
+[ADR 007](docs/adrs/007-trusted-approval-refresh.md).
+
 The public `readiness --mode inspect|demonstrate` operation runs controlled CLI
 scenarios separately from live GitHub readiness evidence. A passing demonstration
 does not certify publication, hosted promotion, runtime recovery or compliance.

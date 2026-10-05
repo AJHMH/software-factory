@@ -1,11 +1,10 @@
 name: Factory Human Review
+run-name: factory-review:${{ github.event.pull_request.number }}:${{ github.event.pull_request.head.sha }}:${{ github.event.pull_request.base.sha }}
 
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
 
 permissions:
   contents: read
@@ -14,7 +13,7 @@ permissions:
 
 concurrency:
   group: factory-human-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   human-review:
@@ -22,11 +21,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Checkout exact PR head and policy history
+      - name: Checkout trusted base evaluator
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout candidate as data only
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
+          path: candidate
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Factory tooling
@@ -34,14 +40,17 @@ jobs:
         with:
           node-version: '24'
       - name: Install validation tooling
+        working-directory: trusted
         run: npm ci --ignore-scripts
       - name: Create evidence directory
+        working-directory: trusted
         run: node -e "require('node:fs').mkdirSync('tmp', {recursive:true})"
       - name: Verify current independent human approvals
+        working-directory: trusted
         env:
           FACTORY_GITHUB_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           BASE_REVISION: ${{ github.event.pull_request.base.sha }}
-          TRUSTED_POLICY_REVISION: ${{ vars.FACTORY_REVIEW_POLICY_REVISION || github.event.pull_request.base.sha }}
-        run: node scripts/factory-validation.mjs collect-reviews --repository "$REPOSITORY" --pull-request "$PULL_REQUEST" --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --coverage-evidence github --output tmp/human-review-evidence.json
+          TRUSTED_POLICY_REVISION: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/factory-validation.mjs collect-reviews --contract ../candidate/factory-contract.yaml --trusted-repo . --repository "$REPOSITORY" --pull-request "$PULL_REQUEST" --base-revision "$BASE_REVISION" --trusted-revision "$TRUSTED_POLICY_REVISION" --coverage-evidence github --output tmp/human-review-evidence.json

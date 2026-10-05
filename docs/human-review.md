@@ -16,8 +16,8 @@ Set `FACTORY_GITHUB_TOKEN` through the runner's environment. Required permission
 are contents, pull requests, actions, and implicit metadata read. Do not put a
 token into an evidence file. Local evaluation accepts `--evidence <file>` and
 `--coverage-evidence <file>` instead of fetching GitHub. Local JSON proves
-consistency; the collector establishes its GitHub source. Release authentication,
-retention, and certification remain ticket #14 work.
+consistency; the collector establishes its GitHub source. Release certification and evidence composition are separate; see
+[release certification](release-certification.md).
 
 ## Authoritative rules
 
@@ -56,39 +56,40 @@ Outstanding changes requested by eligible reviewers block the gate.
 Agents must use separate identities and must be registered when operating through
 User accounts. GitHub cannot determine whether a person or automation controlled a
 shared User token; shared reviewer credentials cannot establish human independence.
-This factory's workflows have no approval/merge/write permissions. Exception
-scope, expiry, and independent trusted ledger checks remain mandatory separately.
+Approval evaluation jobs have no approval or merge permissions. The refresh
+worker has Actions write only for bounded existing-job reruns. Exception scope,
+expiry, and independent trusted ledger checks remain mandatory separately.
 
-## Hosted checks and remaining integration
+## Hosted approval checks
 
-Factory Human Review runs on PR updates and submitted/edited/dismissed reviews.
-It reads the exact PR head, cancels superseded runs for the same PR, and rechecks
-live head/base before producing a result. Factory Coverage retains one JSON
-artifact for seven days, including when its measured thresholds fail. The review
-collector selects the exact-head PR coverage run, reads only evidence.json from
-a bounded archive, and validates its content; it never executes an artifact.
-Evidence is limited to hashes, counts, paths, reviewer identities, and review IDs.
-Review bodies and credentials are excluded.
+Both original approval workflows bind the PR number, exact head and base in
+their run titles. Evaluator/dependency/policy code is loaded from the base;
+candidate source and contract are read as data. The required
+`pull_request_target` workflow remains defined by trusted base code. The ordinary
+PR workflow has read-only permissions and cannot confer authority on the
+privileged refresh worker.
 
-Main requires `Enforce Factory human approval` from GitHub Actions (app 15368),
-alongside Factory SAST, with strict up-to-date checks. The native ruleset requires
-one independent approval and retains stale-review dismissal, review-thread
-resolution, and its existing CodeQL/security/quality rules without bypass actors.
-The proposed solo-developer policy keeps the evaluated count at one for sensitive
-changes. Until that policy is governed and adopted on main, its previous two-review
-count remains authoritative for this bootstrap PR. Ticket #9 must
-complete protection drift, fork verification, trusted evaluator/workflow bootstrap,
-and the merge-time authorization boundary. This workflow currently runs the
-candidate evaluator under read-only permissions; loading policy from base does
-not prevent a malicious PR from editing its own evaluator/workflow. Do not claim
-that boundary is solved until #9 lands. Native independent review requirements
-provide an additional hosted protection during this increment.
+Reviews are observed by a separate read-only workflow. The default-branch worker
+validates live identities and explicit human callers, pins its mutation code to
+the exact base, and requests reruns of the existing approval jobs. It publishes
+no replacement required check and never supplies an approval verdict.
+See [approval refresh](approval-refresh.md) for authorization, stale/revoked
+approval behavior, bounded replay handling and bootstrap/recovery procedures.
 
-The repository has one human owner. Use the dedicated Factory GitHub App to author
-proposals and the owner account to approve them; GitHub does not allow authors to
-approve their own PRs. See [Factory App setup](factory-github-app.md). Existing
-owner-authored PR #26 needs replacement under the App identity. Tests with synthetic
-review identities exercise decisions but do not establish actual human approval.
+Factory Coverage retains exact-head evidence for seven days, including failed
+threshold results. The collector extracts only bounded evidence.json and executes
+no artifact. Review bodies and credentials are excluded from evidence.
+
+Main requires both Factory approval contexts from GitHub Actions (app 15368),
+strict up-to-date checks, one current independent human review, stale-review
+dismissal and review-thread resolution. These protections have no bypass actors.
+Live scoped collection remains necessary to verify ruleset visibility; see
+[governance integration evidence](governance-integration-evidence.md).
+
+The owner account reviews proposals authored by the dedicated Factory App.
+GitHub does not allow authors to approve their own PRs. See [App setup](factory-github-app.md).
+Synthetic review identities exercise decisions but cannot establish actual human
+approval. Hosted refresh must be demonstrated after its reviewed adoption on main.
 
 API contracts: [reviews](https://docs.github.com/en/rest/pulls/reviews),
 [reviewer permissions](https://docs.github.com/en/rest/collaborators), and

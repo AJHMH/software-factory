@@ -223,18 +223,20 @@ test('coverage CI binds the candidate, baseline, and governing policy to GitHub 
   const artifact=job.steps.at(-1);assert.equal(artifact.uses,'actions/upload-artifact@v4');assert.equal(artifact.with.path,'coverage/evidence.json');assert.equal(artifact.with['if-no-files-found'],'error');assert.equal(artifact.with['retention-days'],7);
 });
 
-test('human review re-evaluates current PR heads on reviews and dismissals without write permissions',()=>{
+test('human review evaluates current PR data with the trusted base evaluator and no write permissions',()=>{
   const workflow=parse(readFileSync(join(root,'.github/workflows/factory-agent-review.yml'),'utf8'));
   assert.deepEqual(workflow.permissions,{contents:'read','pull-requests':'read',actions:'read'});
-  assert.deepEqual(workflow.on.pull_request_review.types,['submitted','edited','dismissed']);
+  assert.equal(workflow.on.pull_request_review,undefined);
   assert.ok(workflow.on.pull_request.types.includes('synchronize'));
-  assert.equal(workflow.concurrency['cancel-in-progress'],true);
+  assert.equal(workflow.concurrency['cancel-in-progress'],false);
   assert.ok(!Object.hasOwn(workflow.on,'pull_request_target'));
   const job=workflow.jobs['human-review'];assert.equal(job['continue-on-error'],undefined);
-  assert.equal(job.steps[0].with.ref,'${{ github.event.pull_request.head.sha }}');
+  assert.equal(job.steps[0].with.ref,'${{ github.event.pull_request.base.sha }}');
+  assert.equal(job.steps[0].with.path,'trusted');
   assert.equal(job.steps[0].with['persist-credentials'],false);
   const gate=job.steps.at(-1);assert.equal(gate.env.BASE_REVISION,'${{ github.event.pull_request.base.sha }}');
-  assert.equal(gate.env.TRUSTED_POLICY_REVISION,'${{ vars.FACTORY_REVIEW_POLICY_REVISION || github.event.pull_request.base.sha }}');
+  assert.equal(gate.env.TRUSTED_POLICY_REVISION,'${{ github.event.pull_request.base.sha }}');
+  assert.equal(gate['working-directory'],'trusted');
   assert.ok(gate.run.includes('--trusted-revision "$TRUSTED_POLICY_REVISION"'));
   assert.ok(gate.run.includes('collect-reviews'));assert.ok(gate.run.includes('--coverage-evidence github'));
   assert.ok(job.steps.every(step=>!step['continue-on-error'] && !step.run?.includes('${{')));
