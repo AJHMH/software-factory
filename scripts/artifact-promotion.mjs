@@ -46,6 +46,8 @@ function priorState(options, stateDirectory, environment) {
   const supplied = options['--previous-stable'];
   if (supplied) {
     const previous = jsonFile(resolve(supplied));
+    if (previous.environment === environment && previous.outcome === 'none' && Object.keys(previous).length === 2 &&
+        !existsSync(join(stateDirectory, 'current.json'))) return null;
     if (previous.environment !== environment || previous.outcome !== 'success' || !/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(previous.tag ?? '') ||
       !shaPattern.test(previous.sourceRevision ?? '') || !digestPattern.test(previous.artifactDigest ?? '') || !/^\d{1,20}$/.test(String(previous.deploymentId ?? ''))) {
       throw new Error('Previous stable deployment evidence is malformed or for a different environment.');
