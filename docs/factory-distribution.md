@@ -18,8 +18,8 @@ its source evidence records the actual consumer workload identity. Workspaces,
 Next.js output, other runtimes, and unknown major versions are unsupported. They
 must not be represented as certified by this adapter.
 
-`AJHMH/developer-agentic-os` is the second integration consumer. Its isolated
-`factory-test-workload` tests this supported profile. The Next.js application and
+`AJHMH/profile-page` is the replacement second integration consumer. Its isolated
+`factory-test-workload` tests this supported profile. The SvelteKit application and
 its existing CI, CodeQL, deployment, and repository protection rules remain separate.
 The example workload lives in `examples/consumer-workload` here.
 
@@ -119,3 +119,9 @@ They are unavailable on GitHub Enterprise Server; this distribution currently
 targets GitHub Cloud and fails rather than falling back to mutable caller metadata.
 
 For distribution 1.0.1 gate production, scoped read setup, exact hosted check names, evidence assembly and certification recovery, see [consumer certification](consumer-certification.md) and [ADR 008](adrs/008-consumer-certification-evidence.md).
+
+
+Successful hosted replacement-consumer certification and exact certificate/package
+digests are recorded in [consumer certification](consumer-certification.md#verified-replacement-consumer-2026-10-09).
+The original developer-agentic-os consumer was deleted; its linked runs remain
+historical evidence and are not the replacement consumer's certificate.
