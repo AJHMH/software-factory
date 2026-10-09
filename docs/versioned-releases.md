@@ -47,3 +47,24 @@ gh attestation verify release-manifest.json --repo AJHMH/software-factory \
 ```
 
 The manifest records the version, source revision, certificate digest, artifact digest, and SBOM digest. The certificate records the merged PR, original reviewed PR head, current human approver, required checks, policy evidence, and artifact digests. Publication is a GitHub Release only; it does not deploy the workload.
+
+## Exact-main authorization producers
+
+`Factory Main Authorization Evidence` supplies the canonical execution-policy and
+both human-review checks on the merged source, complementing the existing CI,
+coverage, security and SAST main producers. Certification still requires all eight
+check identities from trusted Governance; PR-only successes cannot replace them.
+
+The main workflow resolves exactly one merged same-repository PR for its source,
+verifies its actual first parent and original head, and denies absent, ambiguous
+or mismatched identities. Human collectors execute trusted first-parent tooling
+against the reviewed head as data, verifying current live owner review with
+`--merged-revision`; they never manufacture approval for the squash commit.
+Policy and human reports are retained as source/run-bound artifacts for 90 days.
+The workflow has only read permissions and executes no candidate workload command.
+
+Certification reports other than human review must use the requested current-main
+policy authority. Human review uses the original first-parent authority. Existing
+main scanner/coverage jobs may use the preceding main policy, so collect or evaluate
+fresh reports through the public validators at the release authority rather than
+rewriting report revision fields. Preserve raw source evidence and all gate digests.

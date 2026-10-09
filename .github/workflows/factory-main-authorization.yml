@@ -1,0 +1,133 @@
+name: Factory Main Authorization Evidence
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+jobs:
+  context:
+    name: Resolve merged Factory review identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      source: ${{ steps.context.outputs.source }}
+      base: ${{ steps.context.outputs.base }}
+      head: ${{ steps.context.outputs.head }}
+      pull: ${{ steps.context.outputs.pull }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind exact main source to its sole merged PR
+        id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$EVENT" == push && "$REF" == refs/heads/main && "$SOURCE" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE" ]]
+          mkdir -p tmp
+          gh api "repos/$REPOSITORY/commits/$SOURCE/pulls?per_page=100" -H 'X-GitHub-Api-Version: 2022-11-28' > tmp/pulls.json
+          jq -e --arg source "$SOURCE" --arg repo "$REPOSITORY" 'if length >= 100 then error("Incomplete PR page") else [.[] | select(.state == "closed" and .merged_at != null and .merge_commit_sha == $source and .base.ref == "main" and .base.repo.full_name == $repo and .head.repo.full_name == $repo)] | if length == 1 then .[0] else error("Ambiguous or absent merged PR") end end' tmp/pulls.json > tmp/pull.json
+          BASE=$(git rev-parse "$SOURCE^1")
+          HEAD=$(jq -r '.head.sha' tmp/pull.json)
+          PULL=$(jq -r '.number' tmp/pull.json)
+          [[ "$BASE" =~ ^[a-f0-9]{40}$ && "$HEAD" =~ ^[a-f0-9]{40}$ && "$PULL" =~ ^[1-9][0-9]*$ ]]
+          [[ "$(jq -r '.base.sha' tmp/pull.json)" == "$BASE" ]]
+          printf 'source=%s\nbase=%s\nhead=%s\npull=%s\n' "$SOURCE" "$BASE" "$HEAD" "$PULL" >> "$GITHUB_OUTPUT"
+  policy:
+    name: Evaluate trusted execution policy
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.context.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: mkdir -p tmp/main-gates
+      - name: Evaluate committed main policy without executing workload commands
+        env:
+          SOURCE: ${{ needs.context.outputs.source }}
+        run: node scripts/factory-validation.mjs policy --trusted-revision "$SOURCE" > tmp/main-gates/policy.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-main-policy-${{ needs.context.outputs.source }}-${{ github.run_id }}
+          path: tmp/main-gates/policy.json
+          if-no-files-found: error
+          retention-days: 90
+  human:
+    name: ${{ matrix.check.name }}
+    needs: context
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - id: human
+            name: Enforce Factory human approval
+          - id: trusted-human
+            name: Enforce Factory trusted human approval
+    steps:
+      - name: Check out trusted first-parent evaluator
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.context.outputs.base }}
+          path: trusted
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out original reviewed head as data only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.context.outputs.head }}
+          path: reviewed
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Make merged source available for exact merge binding
+        working-directory: reviewed
+        env:
+          SOURCE: ${{ needs.context.outputs.source }}
+        run: git fetch --no-tags origin "$SOURCE"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - working-directory: trusted
+        run: npm ci --ignore-scripts
+      - working-directory: trusted
+        run: mkdir -p tmp/main-gates
+      - name: Verify current original-head approval under trusted base policy
+        working-directory: trusted
+        env:
+          FACTORY_GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE: ${{ needs.context.outputs.source }}
+          BASE: ${{ needs.context.outputs.base }}
+          PULL: ${{ needs.context.outputs.pull }}
+        run: >-
+          node scripts/factory-validation.mjs collect-reviews
+          --contract ../reviewed/factory-contract.yaml --trusted-repo .
+          --trusted-revision "$BASE" --base-revision "$BASE"
+          --repository "$REPOSITORY" --pull-request "$PULL"
+          --merged-revision "$SOURCE" --coverage-evidence github
+          --output tmp/main-gates/review-evidence.json > tmp/main-gates/human_review.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-main-${{ matrix.check.id }}-${{ needs.context.outputs.source }}-${{ github.run_id }}
+          path: trusted/tmp/main-gates
+          if-no-files-found: error
+          retention-days: 90
