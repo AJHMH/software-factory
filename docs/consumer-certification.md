@@ -1,7 +1,7 @@
 # Consumer certification runbook
 
-This procedure certifies only `developer-agentic-os/factory-test-workload` under
-Node 24 and the single-module adapter. It does not certify the Next.js application,
+This procedure certifies only `profile-page/factory-test-workload` under
+Node 24 and the single-module adapter. It does not certify the SvelteKit application,
 publish a release, or authorize deployment. Factory distribution 1.0.1 supplies
 all baseline gate producers. Adoption validation alone is insufficient.
 
@@ -101,3 +101,45 @@ If an adoption upgrade fails, restore the prior lock/calls in a reviewed PR and
 restore its independently approved pin. Preserve failed evidence for diagnosis.
 A previous validation-only revision remains uncertified until complete matching
 live evidence exists. GitHub configuration compliance is not runtime authorization.
+
+## Verified replacement consumer (2026-10-09)
+
+The owner selected `AJHMH/profile-page` after the original consumer was deleted.
+Seed the isolated workload in a reviewed PR before adopting Factory: the coverage
+adapter requires runnable baseline tests, with unit tests under `tests/` and
+integration tests under `tests/integration/`. The certification PR head must contain
+that actual baseline; merging the seed after reviewing an unrelated adoption head
+cannot supply valid review-head coverage evidence.
+
+The configured native default CodeQL setup was replaced, with explicit operator
+authorization, by advanced `factory-codeql.yml`. Separate jobs retain full
+application JavaScript/TypeScript and GitHub Actions analysis. Existing application
+CI and `MAIN Checks` ruleset 15629051 remain intact. Authorized no-bypass Factory
+ruleset 24813666 satisfies the full distributed baseline. The expiring consumer-only
+read credential was entered directly into GitHub; a first hosted attempt denied
+HTTP 403, and the corrected token permissions enabled the same dispatch to pass.
+
+Successful evidence:
+
+- [Reviewed consumer PR #108](https://github.com/AJHMH/profile-page/pull/108), head
+  `ddc763152389f540dccc509e068e0072a511f897`, owner review 5474823929.
+- Certified source `b950db04678150a8792f18c2f96c4716c0770fa4`, baseline
+  `ed9ca8c87fc75a9f689bd98132abb2bd437885e2`, Factory policy pin
+  `011e83014d666b782d9eee97c16c6bcf2cecc996` (distribution 1.0.1).
+- [Successful exact-source main producer](https://github.com/AJHMH/profile-page/actions/runs/37984671333).
+- [Successful hosted certification, attempt 2](https://github.com/AJHMH/profile-page/actions/runs/37985441486/attempts/2),
+  retained artifact ID 11643161436,
+  `factory-consumer-certificate-b950db04678150a8792f18c2f96c4716c0770fa4-37985441486`.
+- Downloaded certificate SHA-256
+  `8c1eb58642545d353ba12aded77cfa9c83947f838e2fdda0025d617412b697f6`.
+- Certified package SHA-256
+  `3d64bed43aec96c70c6579dc5a894778ff5e17429fc98672e7cf5c2a0b57f786`;
+  SPDX SBOM SHA-256
+  `15c3775194eaa4cd310951d9efb93cca08457269a0ce4c02281ff9d71e0b122a`.
+
+The downloaded certificate binds all eight exact-source check IDs to Actions
+integration 15368, the independent current-head review, live governance, all six
+gate reports and the immutable package/SBOM. This certifies only the isolated
+Node 24 module. It neither certifies the SvelteKit application nor publishes a
+release or authorizes deployment. Hosted retention is configured for 90 days;
+expiry at the real hosted retention boundary has not been observed.

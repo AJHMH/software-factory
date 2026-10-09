@@ -40,7 +40,13 @@ Factory distribution v1 exposes SHA-pinned reusable validation/certification
 workflows and a baseline policy pack. A consumer lock and independently selected
 repository variable must match the executing Factory revision. Consumer source
 history stays separate from Factory policy history. The second integration consumer
-uses an isolated Node 24 test workload in `AJHMH/developer-agentic-os`; its Next.js
+uses an isolated Node 24 test workload in `AJHMH/profile-page`; its SvelteKit
 application is outside the single-module adapter's certification scope. See
 [distribution](docs/factory-distribution.md) and
 [ADR 005](docs/adrs/005-versioned-factory-distribution.md).
+
+The replacement consumer has a successful retained hosted certificate at source
+`b950db04678150a8792f18c2f96c4716c0770fa4`. See
+[consumer certification](docs/consumer-certification.md) for exact producer,
+review, Factory pin and artifact/SBOM evidence. Publication, protected promotion
+and actual hosted retention expiry remain separate live demonstration gaps.

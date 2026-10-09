@@ -1,6 +1,6 @@
 # Governed Automation readiness
 
-Ticket #20 assessment, 2026-10-04: **incomplete**. Implementation and controlled
+Ticket #20 assessment, updated 2026-10-09: **incomplete**. Implementation and controlled
 demonstrations are available; this is not a production certification or compliance
 claim. The following evidence is historical and revision-bound. Re-run the
 demonstration and obtain fresh GitHub evidence before making a readiness decision.
@@ -71,7 +71,7 @@ from a skipped test or policy configuration.
 | Missing human review denied | [run 37157111221](https://github.com/AJHMH/software-factory/actions/runs/37157111221), PR #26; historical denial |
 | Coverage decrease denied | [run 37157226374](https://github.com/AJHMH/software-factory/actions/runs/37157226374), PR #26; historical denial |
 
-Live API reads on 2026-10-04 returned **zero GitHub Releases and zero Deployments**
+Live API reads on 2026-10-09 returned **zero GitHub Releases and zero Deployments**
 for `AJHMH/software-factory`. Recheck with `gh api repos/AJHMH/software-factory/releases`
 and `gh api repos/AJHMH/software-factory/deployments`. Consequently this report
 does not demonstrate successful hosted signed publication, protected promotion,
@@ -84,13 +84,6 @@ fixtures, not cleanliness of the consumer application or a new release.
 
 ## Readiness gaps and decision
 
-- [#49](https://github.com/AJHMH/software-factory/issues/49): obtain successful
-  second-consumer certification with exact-main producer, current independent
-  approval and all required evidence. Its isolated test workload is in scope;
-  the consumer Next.js application is outside this adapter's scope.
-- [#31](https://github.com/AJHMH/software-factory/issues/31): configure scoped
-  ruleset read access and demonstrate scheduled drift collection including bypass
-  actors. Configuration alone does not establish enforced protection.
 - Obtain an authorized certification, signed release and protected reference
   promotion. Preserve source SHA, producer/certificate run IDs, asset digests,
   verified attestations, current human/Environment approvals and deployment receipt.
@@ -110,3 +103,26 @@ the report whenever a gap is resolved; do not silently promote fixture evidence.
 
 See the [operator guide](OPERATING_MODEL.md), [capability guide](capabilities.md)
 and [ADR 006](adrs/006-readiness-evidence-boundaries.md).
+
+## Resolved live gaps (2026-10-09)
+
+Second-consumer certification (#49) succeeded for the owner-selected replacement
+`AJHMH/profile-page`: [main producer](https://github.com/AJHMH/profile-page/actions/runs/37984671333)
+and [hosted certificate, attempt 2](https://github.com/AJHMH/profile-page/actions/runs/37985441486/attempts/2)
+bind source `b950db04678150a8792f18c2f96c4716c0770fa4` to reviewed head
+`ddc763152389f540dccc509e068e0072a511f897` and Factory pin
+`011e83014d666b782d9eee97c16c6bcf2cecc996`. See the
+[consumer runbook](consumer-certification.md#verified-replacement-consumer-2026-10-09)
+for downloaded certificate, package and SPDX SBOM digests. Deleted-consumer links
+in the earlier table are historical evidence only. The SvelteKit application is
+outside this isolated module's certificate.
+
+Scheduled governance (#31) has genuine successful schedule-event evidence in
+[Factory production](https://github.com/AJHMH/software-factory/actions/runs/37944223538)
+and [integration](https://github.com/AJHMH/software-factory-governance-integration/actions/runs/37944089810),
+both with no drift and policy digest
+`6ba6ed5c1e650bd3dc7f0479e4924bf37ca672977eb7b1e23e970aa18267ec76`.
+
+Overall readiness remains incomplete: fresh API reads still find zero Factory
+Releases and Deployments, and actual hosted delivery-retention expiry is unobserved.
+The CLI inspection's 2026-10-04 gap snapshot is historical, not a live assessment.
