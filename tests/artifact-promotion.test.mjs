@@ -179,3 +179,34 @@ test('GitHub workflow helper authorizes only eligible main dispatches and writes
   assert.equal(approval.status, 0, approval.stderr);
   assert.equal(JSON.parse(readFileSync(evidencePath, 'utf8')).gate, 'approved');
 });
+
+test('first promotion accepts the exact no-history evidence emitted by the hosted collector', t => {
+  const f = fixture(t);
+  const previousPath = join(f.directory, 'previous-stable.json');
+  writeFileSync(previousPath, JSON.stringify({ environment: 'reference', outcome: 'none' }));
+  f.options['--previous-stable'] = previousPath;
+  const result = f.invoke();
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).previousStable, null);
+  const repeated = f.invoke();
+  assert.equal(JSON.parse(repeated.stdout).outcome, 'blocked');
+});
+
+test('no-history evidence rejects a different environment, extra state, and existing local stable state', t => {
+  for (const previous of [
+    { environment: 'production', outcome: 'none' },
+    { environment: 'reference', outcome: 'none', deploymentId: '123' },
+  ]) {
+    const f = fixture(t);
+    const previousPath = join(f.directory, 'previous-stable.json');
+    writeFileSync(previousPath, JSON.stringify(previous));
+    f.options['--previous-stable'] = previousPath;
+    assert.match(JSON.parse(f.invoke().stdout).results[0].reason, /previous stable deployment evidence/i);
+  }
+  const f = fixture(t);
+  assert.equal(f.invoke().status, 0);
+  const previousPath = join(f.directory, 'previous-stable.json');
+  writeFileSync(previousPath, JSON.stringify({ environment: 'reference', outcome: 'none' }));
+  f.options['--previous-stable'] = previousPath;
+  assert.match(JSON.parse(f.invoke().stdout).results[0].reason, /previous stable deployment evidence/i);
+});
