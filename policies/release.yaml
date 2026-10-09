@@ -5,7 +5,7 @@ release:
     require_conventional_commits: true
     initial_version: "0.0.0"
     # Conventional Commit enforcement starts at this mainline baseline; earlier template history is legacy.
-    first_release_baseline: "24d47f48c3ec3713b0ef6ce5f9413ebdd671275b"
+    first_release_baseline: "7b61dcdbba263e76c32da106c2f3b07ebf9d79f2"
 
   certification:
     require_clean_ci: true
