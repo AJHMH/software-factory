@@ -32,7 +32,7 @@
       "pattern": "\\S"
     },
     "profile": {
-      "const": "node-24"
+      "enum": ["node-24", "node-24-typescript-cli"]
     },
     "contract_digest": {
       "type": "string",
@@ -53,7 +53,7 @@
         "properties": {
           "path": {
             "type": "string",
-            "pattern": "^[^\\\\\\r\\n]+\\.mjs$"
+            "pattern": "^[^\\\\\\r\\n]+\\.(?:mjs|ts)$"
           },
           "source_digest": {
             "type": "string",
@@ -134,7 +134,7 @@
             "properties": {
               "path": {
                 "type": "string",
-                "pattern": "^[^\\\\\\r\\n]+\\.mjs$"
+                "pattern": "^[^\\\\\\r\\n]+\\.(?:mjs|ts)$"
               },
               "source_digest": {
                 "type": "string",

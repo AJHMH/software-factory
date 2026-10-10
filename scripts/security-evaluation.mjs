@@ -19,7 +19,7 @@ export function securityContext(options) {
   if (!path || path.startsWith('../') || isAbsolute(path)) throw new Error('Contract is outside repository.');
   const contractSource = rawGit(repo,['show',`${revision}:${path}`]);
   const contract = /** @type {import('./contract-execution.mjs').Contract} */ (document('factory-contract',contractSource)).contract;
-  if (contract.profile !== 'node-24') throw new UnsupportedSecurityCapability('Unsupported security workload profile.');
+  if (!['node-24', 'node-24-typescript-cli'].includes(contract.profile)) throw new UnsupportedSecurityCapability('Unsupported security workload profile.');
   const prefix = relative(repo,resolve(dirname(filename),contract.working_directory)).split(sep).join('/');
   if (prefix.startsWith('../') || isAbsolute(prefix)) throw new Error('Workload escapes repository.');
   const trustedRevision = options['--trusted-revision'];

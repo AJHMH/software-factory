@@ -22,7 +22,7 @@
         ],
         "properties": {
           "id": {
-            "const": "node-24"
+            "enum": ["node-24", "node-24-typescript-cli"]
           },
           "maximum_command_timeout_seconds": {
             "type": "integer",

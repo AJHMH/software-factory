@@ -28,7 +28,7 @@ export function reviewContext(options) {
   const contractRelative=relative(repo,contractPath).split(sep).join('/');
   const contractSource=rawGit(repo,['show',`${revision}:${contractRelative}`]);
   const contract=/** @type {import('./contract-execution.mjs').Contract} */(document('factory-contract',contractSource)).contract;
-  if(contract.profile !== 'node-24' || /(^|\/)\.\.(\/|$)|\\/.test(contract.working_directory)) throw new Error('Unsupported workload.');
+  if(!['node-24', 'node-24-typescript-cli'].includes(contract.profile) || /(^|\/)\.\.(\/|$)|\\/.test(contract.working_directory)) throw new Error('Unsupported workload.');
   const workload=relative(repo,resolve(dirname(contractPath),contract.working_directory)).split(sep).join('/');
   if(workload === '..' || workload.startsWith('../') || workload.startsWith('/')) throw new Error('Unsafe workload.');
   return {repo,revision,base,trusted,trustedRepo,policy,policyDigest:digest(source),contractDigest:digest(contractSource),contractRelative,workload};

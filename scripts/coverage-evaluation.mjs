@@ -39,7 +39,7 @@ export function coverageContext(options) {
 /** @param {string} repo @param {string} revision @param {string} sourcePath */
 export function sourceFiles(repo, revision, sourcePath) {
   const entries = rawGit(repo, ['ls-tree', '-r', '-z', revision, '--', sourcePath]).split('\0').filter(Boolean);
-  return entries.filter(entry => entry.slice(entry.indexOf('\t') + 1).endsWith('.mjs')).map(entry => {
+  return entries.filter(entry => entry.slice(entry.indexOf('\t') + 1).match(/\.(?:mjs|ts)$/)).map(entry => {
     const [metadata, path] = entry.split('\t');
     if (!/^100(644|755) blob /.test(metadata) || /[\r\n\\]/.test(path)) throw new Error('Unsupported coverage source path or file mode.');
     return path;

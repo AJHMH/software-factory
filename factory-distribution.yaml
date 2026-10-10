@@ -1,11 +1,14 @@
 schema_version: 1
-version: 1.0.1
+version: 1.1.0
 contract_version: '1.0'
 policy_pack: baseline-1
 profiles:
   node-24:
     node_major: '24'
     artifact_adapter: single-module-npm-v1
+  node-24-typescript-cli:
+    node_major: '24'
+    artifact_adapter: typescript-cli-npm-v1
 entry_points:
   validation: .github/workflows/factory-consumer-validation.yml
   certification: .github/workflows/factory-consumer-certification.yml

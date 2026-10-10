@@ -12,7 +12,7 @@
       "required": ["workload_id", "profile", "working_directory", "commands"],
       "properties": {
         "workload_id": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$" },
-        "profile": { "const": "node-24" },
+        "profile": { "enum": ["node-24", "node-24-typescript-cli"] },
         "working_directory": { "type": "string", "minLength": 1 },
         "commands": {
           "type": "object", "additionalProperties": false,

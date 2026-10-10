@@ -76,9 +76,13 @@ export async function collectCoverage(options) {
       // Built-in-only reference tests need no dependencies. Packages declaring dependencies must install them safely.
       try {
         const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
-        if (Object.keys(manifest.dependencies ?? {}).length) {
+        if (Object.keys(manifest.dependencies ?? {}).length || context.contract.profile === 'node-24-typescript-cli') {
           const install = await execute({ run: 'npm ci --ignore-scripts', timeout_seconds: 120 }, cwd);
           if (install.status !== 'passed') throw new Error('Snapshot dependency installation failed or timed out.');
+          if (context.contract.profile === 'node-24-typescript-cli') {
+            const build = await execute({ run: 'node node_modules/typescript/bin/tsc', timeout_seconds: 120 }, cwd);
+            if (build.status !== 'passed') throw new Error('Snapshot TypeScript compilation failed.');
+          }
         }
       } catch (error) { if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'ENOENT') throw error; }
     }
@@ -86,7 +90,9 @@ export async function collectCoverage(options) {
     /** @type {{unit: import('./coverage-evaluation.mjs').TestResult, integration: import('./coverage-evaluation.mjs').TestResult}} */
     const tests = { unit: { revision: context.revision, status: 'not-run', exit_code: null }, integration: { revision: context.revision, status: 'not-run', exit_code: null } };
     for (const [name, path] of [['unit', 'tests'], ['integration', 'tests/integration']]) {
-      const files = testFiles(snapshots.head, path);
+      const files = context.contract.profile === 'node-24-typescript-cli'
+        ? (name === 'unit' ? testFiles(snapshots.head, 'tests').filter(file => !file.endsWith('delivery.test.mjs')) : testFiles(snapshots.head, 'tests').filter(file => file.endsWith('delivery.test.mjs')))
+        : testFiles(snapshots.head, path);
       if (files.length) {
         const result = await execute({ run: `${node} --test ${files.map(quote).join(' ')}`, timeout_seconds: 60 }, snapshots.head);
         tests[/** @type {'unit'|'integration'} */ (name)] = { revision: context.revision, status: result.status, exit_code: result.exitCode };
@@ -98,7 +104,7 @@ export async function collectCoverage(options) {
       const files = [...testFiles(cwd, 'tests'), ...testFiles(cwd, 'tests/integration')];
       if (!files.length) throw new Error('Coverage baseline or candidate has no runnable tests.');
       const reports = join(directory, name + '-report');
-      const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote('src/**/*.mjs')} --extension .mjs --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test ${files.map(quote).join(' ')}`;
+      const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote(context.contract.profile === 'node-24-typescript-cli' ? 'src/**/*.ts' : 'src/**/*.mjs')} --extension .mjs --extension .ts --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test ${files.map(quote).join(' ')}`;
       const result = await execute({ run, timeout_seconds: 60 }, cwd);
       if (result.status !== 'passed') throw new Error(`${name} coverage instrumentation failed or timed out; evidence cannot pass.`);
       measured.push(evidenceFiles(context, revision, cwd, reports));

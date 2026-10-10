@@ -1,5 +1,10 @@
 # Software Factory context
 
+Developer OS onboarding alongside profile-page is proposed through a separate
+Node 24 TypeScript CLI profile. Repository authority, PR review and certification
+remain independent per consumer. See [Developer OS onboarding](docs/developer-os-onboarding.md)
+and [ADR 009](docs/adrs/009-typescript-cli-consumer.md).
+
 This repository is a governed software-factory template. Projects expose a workload through `factory-contract.yaml`; trusted Factory policy and GitHub workflows validate that workload before downstream consumers use its outputs.
 
 ## Traceable workload artifacts

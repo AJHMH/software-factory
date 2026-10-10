@@ -1,5 +1,10 @@
 # Versioned Factory adoption
 
+Distribution 1.1.0 additionally supports the opt-in `node-24-typescript-cli`
+profile and `typescript-cli-npm-v1` adapter for Developer OS. The v1.0 profile and
+existing consumer pins remain supported. See [Developer OS onboarding](developer-os-onboarding.md)
+for the CLI layout, evidence boundaries and per-repository setup.
+
 Factory distribution API v1 ships `factory-distribution.yaml` with the reusable
 `factory-consumer-validation.yml` and `factory-consumer-certification.yml` entry
 points. Consumers call these workflows by full commit SHA; they do not copy the

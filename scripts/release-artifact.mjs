@@ -5,9 +5,9 @@ import {spawnSync} from 'node:child_process';
 import {parse} from 'yaml';
 import {rawGit} from './coverage-evaluation.mjs';
 import {distributionContext} from './factory-distribution.mjs';
+import {cliLayout,cliSource,cliBundle} from './typescript-cli-artifact.mjs';
 
 const format='SPDX-2.3';
-const artifactName='reference-workload.mjs';
 const sbomName='sbom.spdx.json';
 const sourceEvidenceName='source-evidence.json';
 const validationEvidenceName='validation-evidence.json';
@@ -58,9 +58,10 @@ function resolvePackage(lock,parent,name) {
 function context(repo,revision,distribution) {
  if(!/^[a-f0-9]{40}$/.test(revision??'') || git(repo,['cat-file','-t',revision])!=='commit') deny('A trusted source commit is required.');
  const contractSource=rawGit(repo,['show',`${revision}:factory-contract.yaml`]),contract=parse(contractSource)?.contract;
- if(!object(contract) || !distribution && contract.workload_id!=='factory-reference-workload' || contract.profile!=='node-24' || typeof contract.working_directory!=='string') deny('The committed reference workload contract is unsupported.');
- const workloadDirectory=contract.working_directory.replace(/\\/g,'/').replace(/\/$/,''),prefix=workloadDirectory+'/',manifestPath=prefix+'package.json',lockPath=prefix+'package-lock.json',sourcePath=prefix+'src/index.mjs';
- if(workloadDirectory.startsWith('/') || workloadDirectory.split('/').some(part=>!part || part==='.' || part==='..')) deny('The committed workload path is unsafe.');
+ if(!object(contract) || !distribution && contract.workload_id!=='factory-reference-workload' || !['node-24','node-24-typescript-cli'].includes(contract.profile) || typeof contract.working_directory!=='string') deny('The committed reference workload contract is unsupported.');
+ const workloadDirectory=contract.working_directory.replace(/\\/g,'/').replace(/\/$/,''),prefix=workloadDirectory==='.' && contract.profile==='node-24-typescript-cli' ? '' : workloadDirectory+'/',manifestPath=prefix+'package.json',lockPath=prefix+'package-lock.json',sourcePath=prefix+(contract.profile==='node-24-typescript-cli'?'src/':'src/index.mjs');
+ if(workloadDirectory!=='.' && (workloadDirectory.startsWith('/') || workloadDirectory.split('/').some(part=>!part || part==='.' || part==='..'))) deny('The committed workload path is unsafe.');
+ if(workloadDirectory==='.' && contract.profile!=='node-24-typescript-cli') deny('Root workload is unsupported for the reference adapter.');
  const manifest=parseJson(rawGit(repo,['show',`${revision}:${manifestPath}`])),lock=parseJson(rawGit(repo,['show',`${revision}:${lockPath}`]));
  const dependencyPolicy=parse(rawGit(distribution?.factoryRepo??repo,['show',`${distribution?.revision??revision}:policies/dependencies.yaml`]))?.dependencies;
  const sourcePolicy=distribution ? {...dependencyPolicy?.artifact,source_lockfile:lockPath} : dependencyPolicy?.artifact;
@@ -79,7 +80,8 @@ function context(repo,revision,distribution) {
   if(pkg.link || typeof pkg.version!=='string' || !/^[0-9A-Za-z.+-]+$/.test(pkg.version) || (pkg.name!==undefined && pkg.name!==name) || registry.protocol!=='https:' || registry.host!=='registry.npmjs.org' || registry.username || registry.password || registry.port || registry.search || registry.hash || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(pkg.integrity??'')) deny(`Locked dependency metadata is unsupported for ${name}.`);
  }
  const treeDigest=git(repo,['rev-parse',`${revision}^{tree}`]);
- return {repo,revision,contract,contractSource,contractDigest:sha256(contractSource),prefix,sourcePath,manifestPath,lockPath,manifest,lock,treeDigest,dependencyPolicy,sourcePolicy,entries};
+ if(contract.profile==='node-24-typescript-cli') { if(!distribution) deny('CLI artifacts require an approved distribution.'); cliLayout({repo,revision,prefix,manifest}); }
+ return {artifactName:contract.profile==='node-24-typescript-cli'?'cli-bundle.json':'reference-workload.mjs',repo,revision,contract,contractSource,contractDigest:sha256(contractSource),prefix,sourcePath,manifestPath,lockPath,manifest,lock,treeDigest,dependencyPolicy,sourcePolicy,entries};
 }
 /** @param {ReturnType<typeof context>} ctx @param {string} artifactDigest @param {string} created */
 function sbom(ctx,artifactDigest,created) {
@@ -120,11 +122,13 @@ function npmVersion(executableDirectory) {
 /** @param {string} output @param {ReturnType<typeof context>} ctx @param {Json} validation */
 function produce(output,ctx,validation) {
  validateReport(validation,ctx);
+ const artifactName=ctx.artifactName;
  const outputPath=resolve(output),within=relative(ctx.repo,outputPath);
  if(within==='..' || within.startsWith(`..${process.platform==='win32'?'\\':'/'}`) || isAbsolute(within)) deny('Artifact output must be a new directory inside the repository.');
  if(existsSync(outputPath)) {const stats=lstatSync(outputPath);if(!stats.isDirectory() || stats.isSymbolicLink() || readdirSync(outputPath).length) deny('Artifact output directory must be new or empty.');}
- const builtPath=resolve(ctx.repo,ctx.prefix,'dist/index.mjs'),built=regularFile(builtPath),source=Buffer.from(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.sourcePath}`]));
- if(!built.length || !built.equals(source)) deny('The single built artifact does not match its committed source file.');
+ const cli=ctx.contract.profile==='node-24-typescript-cli';
+ const built=cli?cliBundle(ctx):regularFile(resolve(ctx.repo,ctx.prefix,'dist/index.mjs')),source=cli?cliSource(ctx):Buffer.from(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.sourcePath}`]));
+ if(!built.length || !cli && !built.equals(source)) deny('The single built artifact does not match its committed source file.');
  const created=new Date().toISOString(),artifactDigest=sha256(built),bom=sbom(ctx,artifactDigest,created),bomSource=JSON.stringify(bom,null,2)+'\n',bomDigest=sha256(bomSource);
  const validationSource=JSON.stringify(validation,null,2)+'\n',validationDigest=sha256(validationSource);
  const evidence={schemaVersion:1,outcome:'passed',createdAt:created,source:{revision:ctx.revision,treeDigest:ctx.treeDigest,workloadId:ctx.contract.workload_id,profile:ctx.contract.profile,contractDigest:ctx.contractDigest,files:{workloadSource:{path:ctx.sourcePath,sha256:sha256(source)},manifest:{path:ctx.manifestPath,sha256:sha256(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.manifestPath}`]))},lockfile:{path:ctx.lockPath,sha256:sha256(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.lockPath}`]))}}},artifact:{filename:artifactName,sha256:artifactDigest,size:built.length},sbom:{filename:sbomName,format,sha256:bomDigest,dependencyCount:ctx.entries.length},validation:{filename:validationEvidenceName,sha256:validationDigest,capabilities:['install','validate','test','build']},dependencySource:{ecosystem:'npm',registry:ctx.sourcePolicy.dependency_registry,lockfile:ctx.lockPath,lockfileVersion:ctx.sourcePolicy.lockfile_version,includesDevelopmentDependencies:ctx.sourcePolicy.include_development_dependencies,packageCount:ctx.entries.length},tools:{factoryArtifact:'1.0.0',node:process.version,npm:npmVersion(dirname(process.execPath)),typescript:ctx.manifest.devDependencies?.typescript??null}};
@@ -135,14 +139,17 @@ function produce(output,ctx,validation) {
 /** @param {string} directory @param {ReturnType<typeof context>} ctx @param {string} expectedRevision */
 function verify(directory,ctx,expectedRevision) {
  if(expectedRevision!==ctx.revision) deny('The requested source revision does not match the trusted source commit.');
+ const artifactName=ctx.artifactName;
  const path=resolve(directory),names=[artifactName,sbomName,sourceEvidenceName,validationEvidenceName].sort();
  if(!lstatSync(path).isDirectory() || lstatSync(path).isSymbolicLink() || json(readdirSync(path).sort())!==json(names)) deny('The downloaded artifact bundle is incomplete or contains unexpected files.');
  const artifact=regularFile(join(path,artifactName)),bomBytes=regularFile(join(path,sbomName)),evidenceBytes=regularFile(join(path,sourceEvidenceName)),validationBytes=regularFile(join(path,validationEvidenceName));
  const evidence=parseJson(evidenceBytes.toString('utf8')),validation=parseJson(validationBytes.toString('utf8')),artifactDigest=sha256(artifact),bomDigest=sha256(bomBytes.toString('utf8'));
  validateReport(validation,ctx);
  if(evidence.schemaVersion!==1 || evidence.outcome!=='passed' || evidence.source?.revision!==ctx.revision || evidence.source?.treeDigest!==ctx.treeDigest || evidence.source?.workloadId!==ctx.contract.workload_id || evidence.source?.profile!==ctx.contract.profile || evidence.source?.contractDigest!==ctx.contractDigest || !Number.isFinite(Date.parse(evidence.createdAt)) || evidence.artifact?.filename!==artifactName || evidence.artifact?.sha256!==artifactDigest || evidence.artifact?.size!==artifact.length || evidence.sbom?.filename!==sbomName || evidence.sbom?.format!==format || evidence.sbom?.sha256!==bomDigest || evidence.sbom?.dependencyCount!==ctx.entries.length || evidence.validation?.filename!==validationEvidenceName || evidence.validation?.sha256!==sha256(validationBytes.toString('utf8')) || json(evidence.validation?.capabilities)!==json(['install','validate','test','build']) || evidence.dependencySource?.ecosystem!=='npm' || evidence.dependencySource?.registry!==ctx.sourcePolicy.dependency_registry || evidence.dependencySource?.lockfile!==ctx.lockPath || evidence.dependencySource?.lockfileVersion!==ctx.sourcePolicy.lockfile_version || evidence.dependencySource?.includesDevelopmentDependencies!==true || evidence.dependencySource?.packageCount!==ctx.entries.length || evidence.tools?.factoryArtifact!=='1.0.0' || typeof evidence.tools?.node!=='string' || !/^v24\.\d+\.\d+$/.test(evidence.tools.node) || typeof evidence.tools?.npm!=='string' || evidence.tools?.typescript!==ctx.manifest.devDependencies?.typescript) deny('Source, tool, validation, or digest evidence does not match the trusted release artifact.');
+ const cli=ctx.contract.profile==='node-24-typescript-cli',source=cli?cliSource(ctx):Buffer.from(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.sourcePath}`]));
+ if(cli) cliBundle(ctx,artifact);
  const sourceEvidence=evidence.source.files;
- if(sourceEvidence?.workloadSource?.path!==ctx.sourcePath || sourceEvidence?.workloadSource?.sha256!==sha256(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.sourcePath}`])) || sourceEvidence?.manifest?.path!==ctx.manifestPath || sourceEvidence?.manifest?.sha256!==sha256(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.manifestPath}`])) || sourceEvidence?.lockfile?.path!==ctx.lockPath || sourceEvidence?.lockfile?.sha256!==sha256(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.lockPath}`])) || !artifact.equals(Buffer.from(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.sourcePath}`])))) deny('Artifact bytes or committed source digests do not match the requested revision.');
+ if(sourceEvidence?.workloadSource?.path!==ctx.sourcePath || sourceEvidence?.workloadSource?.sha256!==sha256(source) || sourceEvidence?.manifest?.path!==ctx.manifestPath || sourceEvidence?.manifest?.sha256!==sha256(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.manifestPath}`])) || sourceEvidence?.lockfile?.path!==ctx.lockPath || sourceEvidence?.lockfile?.sha256!==sha256(rawGit(ctx.repo,['show',`${ctx.revision}:${ctx.lockPath}`])) || !cli && !artifact.equals(source)) deny('Artifact bytes or committed source digests do not match the requested revision.');
  const bom=parseJson(bomBytes.toString('utf8'));
  if(json(bom)!==json(sbom(ctx,artifactDigest,evidence.createdAt))) deny('The SBOM packages, sources, or artifact association do not match the committed lockfile.');
  return {operation:'release-artifact',outcome:'passed',revision:ctx.revision,artifactDigest,sbomDigest:bomDigest,validationEvidenceDigest:sha256(JSON.stringify(validation)),dependencyCount:ctx.entries.length,dependencySource:{ecosystem:evidence.dependencySource.ecosystem,registry:evidence.dependencySource.registry,lockfile:evidence.dependencySource.lockfile,lockfileVersion:evidence.dependencySource.lockfileVersion,includesDevelopmentDependencies:evidence.dependencySource.includesDevelopmentDependencies,packageCount:evidence.dependencySource.packageCount},results:[{capability:'traceable-build-artifacts',required:true,status:'passed',reason:'Downloaded bytes, SBOM, validation evidence, and source metadata match the recorded immutable source revision; verification performed without rebuilding.'}]};
