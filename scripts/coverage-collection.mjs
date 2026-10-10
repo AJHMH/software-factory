@@ -104,7 +104,7 @@ export async function collectCoverage(options) {
       const files = [...testFiles(cwd, 'tests'), ...testFiles(cwd, 'tests/integration')];
       if (!files.length) throw new Error('Coverage baseline or candidate has no runnable tests.');
       const reports = join(directory, name + '-report');
-      const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote(context.contract.profile === 'node-24-typescript-cli' ? 'src/**/*.ts' : 'src/**/*.mjs')} --extension .mjs --extension .ts --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test ${files.map(quote).join(' ')}`;
+      const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote(context.contract.profile === 'node-24-typescript-cli' ? 'src/**/*.ts' : 'src/**/*.mjs')} --extension .mjs --extension .ts ${context.contract.profile === 'node-24-typescript-cli' ? '--extension .js --exclude-after-remap' : ''} --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test ${files.map(quote).join(' ')}`;
       const result = await execute({ run, timeout_seconds: 60 }, cwd);
       if (result.status !== 'passed') throw new Error(`${name} coverage instrumentation failed or timed out; evidence cannot pass.`);
       measured.push(evidenceFiles(context, revision, cwd, reports));

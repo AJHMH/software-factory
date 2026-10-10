@@ -201,3 +201,32 @@ test('CLI publication denies unexpected build files, unapproved adapter and muta
   f.save(); f.commit(f.consumer);
   assert.equal(f.run().status, 1);
 });
+
+test('CLI coverage remaps executed JavaScript to TypeScript and cannot omit unused sources', t => {
+  const f = fixture(t, true);
+  mkdirSync(join(f.consumer, 'tests'));
+  const unit = "import assert from 'node:assert/strict'; import test from 'node:test'; import {answer} from '../dist/cli.js'; test('answer',()=>assert.equal(answer,42));\n";
+  writeFileSync(join(f.consumer, 'tests/unit.test.mjs'), unit);
+  writeFileSync(join(f.consumer, 'tests/delivery.test.mjs'), unit);
+  const base = f.commit(f.consumer);
+  writeFileSync(join(f.consumer, 'src/unused.ts'), 'export const unused: number = 7;\n');
+  f.commit(f.consumer);
+  const evidencePath = join(f.consumer, 'tmp/coverage.json');
+  mkdirSync(join(f.consumer, 'tmp'));
+  const args = [cli, 'measure-coverage', '--contract', join(f.consumer, 'factory-contract.yaml'), '--trusted-repo', f.factory, '--trusted-revision', f.revision, '--base-revision', base, '--output', evidencePath];
+  const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.metrics.global.lines.covered, 1);
+  assert.equal(report.metrics.global.lines.total, 2);
+  const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
+  assert.deepEqual(evidence.files.map(file => file.path), ['src/cli.ts', 'src/unused.ts']);
+  assert.equal(evidence.tests.unit.status, 'passed');
+  assert.equal(evidence.tests.integration.status, 'passed');
+  writeFileSync(join(f.factory, 'profiles/workloads.yaml'), stringify({ version: '1.0', profiles: [{ id: 'node-24', maximum_command_timeout_seconds: 120 }] }));
+  const oldAuthority = f.commit(f.factory);
+  args[args.indexOf('--trusted-revision') + 1] = oldAuthority;
+  const denied = spawnSync(process.execPath, args, { encoding: 'utf8' });
+  assert.equal(denied.status, 1);
+  assert.match(JSON.parse(denied.stdout).results[0].reason, /not authorized/);
+});

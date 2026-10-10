@@ -28,6 +28,15 @@ export function document(name, source) {
   return value;
 }
 
+/** New adapters require explicit support in the independently pinned policy pack.
+ * @param {string} repo @param {string} revision @param {string} profile
+ */
+export function requireWorkloadProfile(repo, revision, profile) {
+  if (profile === 'node-24') return;
+  const profiles = /** @type {Profiles} */ (document('workload-profiles', git(repo, ['show', `${revision}:profiles/workloads.yaml`])));
+  if (profiles.profiles.filter(entry => entry.id === profile).length !== 1) throw new Error('Workload profile is not authorized by the trusted policy revision.');
+}
+
 /** Evaluate data only; the trusted revision is selected by the invoking operator, never the candidate. @param {Record<string, string>} options */
 export function evaluatePolicy(options) {
   try {

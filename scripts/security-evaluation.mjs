@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve, relative, sep, isAbsolute } from 'node:path';
 import { parse } from 'yaml';
-import { digest, git, document } from './policy-evaluation.mjs';
+import { digest, git, document, requireWorkloadProfile } from './policy-evaluation.mjs';
 import { rawGit } from './coverage-evaluation.mjs';
 
 export class UnsupportedSecurityCapability extends Error {}
@@ -25,6 +25,7 @@ export function securityContext(options) {
   const trustedRevision = options['--trusted-revision'];
   if (!/^[a-f0-9]{40}$/.test(trustedRevision ?? '') || git(options['--trusted-repo'] ?? repo,['cat-file','-t',trustedRevision]) !== 'commit') throw new Error('Pinned trusted commit is required.');
   const trustedRepo = options['--trusted-repo'] ?? repo;
+  requireWorkloadProfile(trustedRepo, trustedRevision, contract.profile);
   const policySource = rawGit(trustedRepo,['show',`${trustedRevision}:policies/security.yaml`]);
   const policy = parse(policySource), security = policy?.security;
   const dependencySource = rawGit(trustedRepo,['show',`${trustedRevision}:policies/dependencies.yaml`]);

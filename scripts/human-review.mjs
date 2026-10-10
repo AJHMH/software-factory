@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve, relative, sep } from 'node:path';
 import { parse } from 'yaml';
 import Ajv from 'ajv';
-import { digest, document, git } from './policy-evaluation.mjs';
+import { digest, document, git, requireWorkloadProfile } from './policy-evaluation.mjs';
 import { rawGit, evaluateCoverage } from './coverage-evaluation.mjs';
 
 /** @typedef {{id:number,login:string,type:'User'|'Bot',state:string,commit_id:string,submitted_at:string,permission:string}} Review */
@@ -29,6 +29,7 @@ export function reviewContext(options) {
   const contractSource=rawGit(repo,['show',`${revision}:${contractRelative}`]);
   const contract=/** @type {import('./contract-execution.mjs').Contract} */(document('factory-contract',contractSource)).contract;
   if(!['node-24', 'node-24-typescript-cli'].includes(contract.profile) || /(^|\/)\.\.(\/|$)|\\/.test(contract.working_directory)) throw new Error('Unsupported workload.');
+  requireWorkloadProfile(trustedRepo, trusted, contract.profile);
   const workload=relative(repo,resolve(dirname(contractPath),contract.working_directory)).split(sep).join('/');
   if(workload === '..' || workload.startsWith('../') || workload.startsWith('/')) throw new Error('Unsafe workload.');
   return {repo,revision,base,trusted,trustedRepo,policy,policyDigest:digest(source),contractDigest:digest(contractSource),contractRelative,workload};
