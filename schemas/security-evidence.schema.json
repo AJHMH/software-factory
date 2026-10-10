@@ -3,7 +3,7 @@
   "required":["version","revision","tree_digest","workload_id","profile","contract_digest","tools","secrets","dependencies"],
   "properties":{
     "version":{"const":"1.0"},"revision":{"$ref":"#/definitions/sha"},"tree_digest":{"$ref":"#/definitions/sha"},
-    "workload_id":{"type":"string","minLength":1},"profile":{"const":"node-24"},"contract_digest":{"$ref":"#/definitions/digest"},
+    "workload_id":{"type":"string","minLength":1},"profile":{"enum":["node-24","node-24-typescript-cli"]},"contract_digest":{"$ref":"#/definitions/digest"},
     "tools":{"type":"object","additionalProperties":false,"required":["gitleaks","osv"],"properties":{"gitleaks":{"const":"8.30.1"},"osv":{"const":"2.6.0"}}},
     "secrets":{"$ref":"#/definitions/secrets"},"dependencies":{"$ref":"#/definitions/dependencies"}
   },

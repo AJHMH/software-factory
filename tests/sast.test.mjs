@@ -8,7 +8,7 @@ import test from 'node:test';
 
 const root=fileURLToPath(new URL('../',import.meta.url)), cli=join(root,'scripts/factory-validation.mjs');
 const hash=value=>createHash('sha256').update(value).digest('hex');
-function fixture(t) {
+function fixture(t, profile = 'node-24') {
   mkdirSync(join(root,'tmp'),{recursive:true});
   const repo=mkdtempSync(join(root,'tmp/sast-test-'));
   t.after(()=>{const within=relative(realpathSync(join(root,'tmp')),realpathSync(repo));assert.ok(within && within !== '..' && !within.startsWith('..'+sep) && !isAbsolute(within));rmSync(repo,{recursive:true,force:true});});
@@ -16,11 +16,15 @@ function fixture(t) {
   const write=(name,value)=>writeFileSync(join(repo,name),typeof value === 'string' ? value : JSON.stringify(value));
   mkdirSync(join(repo,'policies'));mkdirSync(join(repo,'workload'));
   for (const name of ['security','dependencies','enforcement']) write(`policies/${name}.yaml`,readFileSync(join(root,`policies/${name}.yaml`),'utf8'));
-  const contract={version:'1.0',contract:{workload_id:'sast-workload',profile:'node-24',working_directory:'workload',commands:Object.fromEntries(['install','validate','test','build'].map(name=>[name,{run:'exit 0',timeout_seconds:10}]))}};
+  if (profile === 'node-24-typescript-cli') {
+    mkdirSync(join(repo, 'profiles'));
+    for (const name of ['workloads', 'codeql']) write('profiles/' + name + '.yaml', readFileSync(join(root, 'profiles/' + name + '.yaml'), 'utf8'));
+  }
+  const contract={version:'1.0',contract:{workload_id:'sast-workload',profile,working_directory:'workload',commands:Object.fromEntries(['install','validate','test','build'].map(name=>[name,{run:'exit 0',timeout_seconds:10}]))}};
   write('factory-contract.yaml',contract);write('workload/index.mjs','export const value=1;\n');git('init');git('add','.');
   git('-c','commit.gpgsign=false','-c','user.name=Test','-c','user.email=test@example.invalid','commit','-m','fixture');
   const revision=git('rev-parse','HEAD');
-  const evidence={version:'1.0',revision,tree_digest:git('rev-parse','HEAD^{tree}'),contract_digest:hash(JSON.stringify(contract)),workload_id:'sast-workload',profile:'node-24',analyses:[{id:123,revision,ref:'refs/pull/1/head',language:'javascript-typescript',build_mode:'none',tool_version:'2.27.1',rules_count:87,status:'success',findings:[]}]};
+  const evidence={version:'1.0',revision,tree_digest:git('rev-parse','HEAD^{tree}'),contract_digest:hash(JSON.stringify(contract)),workload_id:'sast-workload',profile,analyses:[{id:123,revision,ref:'refs/pull/1/head',language:'javascript-typescript',build_mode:'none',tool_version:'2.27.1',rules_count:87,status:'success',findings:[]}]};
   const run=(command='sast')=>{write('sast.json',evidence);const result=spawnSync(process.execPath,[cli,command,'--trusted-revision',revision,'--trusted-repo',repo,'--contract',join(repo,'factory-contract.yaml'),...(command === 'sast' ? ['--evidence',join(repo,'sast.json')] : ['--repository','AJHMH/software-factory','--ref','refs/heads/main'])],{cwd:root,encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'',GITHUB_STEP_SUMMARY:''}});return {...result,report:result.stdout ? JSON.parse(result.stdout) : null};};
   return {repo,write,git,revision,evidence,run};
 }
@@ -70,4 +74,26 @@ test('public SAST collector accepts only an advanced analysis identity selected 
   assert.equal(JSON.parse(result.stdout).outcome,'passed');
   const denied=spawnSync(process.execPath,['--import',pathToFileURL(preload).href,cli,'collect-sast','--trusted-revision',revision,'--trusted-repo',f.repo,'--contract',join(f.repo,'factory-contract.yaml'),'--repository','AJHMH/software-factory','--ref','refs/heads/main','--analysis-key','.github/workflows/unapproved.yml:analyze'],{cwd:root,encoding:'utf8',env:{...process.env,FACTORY_GITHUB_TOKEN:'fixture-token',GITHUB_STEP_SUMMARY:''}});
   assert.equal(denied.status,1);assert.equal(JSON.parse(denied.stdout).outcome,'blocked');
+});
+
+
+test('CLI profile accepts clean sast evidence and rejects mismatched or unknown profiles', t => {
+  const f = fixture(t, 'node-24-typescript-cli');
+  const passed = f.run();
+  assert.equal(passed.status, 0, passed.stderr || passed.stdout);
+  assert.ok(passed.report.results.every(result => result.status === 'passed'));
+  for (const profile of ['node-24', 'unrecognized-profile']) {
+    f.evidence.profile = profile;
+    const denied = f.run();
+    assert.equal(denied.status, 1, denied.stdout);
+    assert.equal(denied.report.outcome, 'blocked');
+  }
+});
+
+test('CLI profile still blocks prohibited SAST severity', t => {
+  const f = fixture(t, 'node-24-typescript-cli');
+  f.evidence.analyses[0].findings = [{rule:'js/command-line-injection',severity:'high',path:'workload/index.mjs',line:1,help_url:'https://codeql.github.com/codeql-query-help/javascript/js-command-line-injection/'}];
+  const denied = f.run();
+  assert.equal(denied.status, 1);
+  assert.equal(denied.report.results[0].status, 'failed');
 });

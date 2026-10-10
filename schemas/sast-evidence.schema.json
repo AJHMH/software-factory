@@ -3,7 +3,7 @@
   "required":["version","revision","tree_digest","contract_digest","workload_id","profile","analyses"],
   "properties":{
     "version":{"const":"1.0"},"revision":{"$ref":"#/definitions/sha"},"tree_digest":{"$ref":"#/definitions/sha"},"contract_digest":{"type":"string","pattern":"^[a-f0-9]{64}$"},
-    "workload_id":{"type":"string","minLength":1},"profile":{"const":"node-24"},
+    "workload_id":{"type":"string","minLength":1},"profile":{"enum":["node-24","node-24-typescript-cli"]},
     "analyses":{"type":"array","minItems":1,"maxItems":1,"items":{"type":"object","additionalProperties":false,
       "required":["id","revision","ref","language","build_mode","tool_version","rules_count","status","findings"],
       "properties":{
