@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const cli = fileURLToPath(new URL('../scripts/factory-validation.mjs', import.meta.url));
 const hash = value => createHash('sha256').update(value).digest('hex');
 
-function fixture(t) {
+function fixture(t, profile = 'node-24') {
   mkdirSync(join(root, 'tmp'), { recursive: true });
   const repo = mkdtempSync(join(root, 'tmp/security-test-'));
   t.after(() => {
@@ -27,14 +27,18 @@ function fixture(t) {
   mkdirSync(join(repo, 'policies')); mkdirSync(join(repo, 'workload')); mkdirSync(join(repo, 'workload/tests'));
   for (const name of ['security', 'dependencies', 'enforcement']) write(`policies/${name}.yaml`, readFileSync(join(root, `policies/${name}.yaml`), 'utf8'));
   write('policies/security-dummy-approvals.json', { version: '1.0', approvals: [] });
-  const contract = { version: '1.0', contract: { workload_id: 'security-workload', profile: 'node-24', working_directory: 'workload', commands: Object.fromEntries(['install','validate','test','build'].map(name => [name,{run:'exit 0',timeout_seconds:10}])) } };
+  if (profile === 'node-24-typescript-cli') {
+    mkdirSync(join(repo, 'profiles'));
+    for (const name of ['workloads', 'codeql']) write('profiles/' + name + '.yaml', readFileSync(join(root, 'profiles/' + name + '.yaml'), 'utf8'));
+  }
+  const contract = { version: '1.0', contract: { workload_id: 'security-workload', profile, working_directory: 'workload', commands: Object.fromEntries(['install','validate','test','build'].map(name => [name,{run:'exit 0',timeout_seconds:10}])) } };
   write('factory-contract.yaml', contract); write('workload/package.json', {name:'fixture',version:'1.0.0'});
   write('workload/package-lock.json', {name:'fixture',version:'1.0.0',lockfileVersion:3,packages:{'':{name:'fixture',version:'1.0.0'}}});
   git('init'); git('add', '.');
   const commit = () => { git('add','.'); git('-c','commit.gpgsign=false','-c','user.name=Test','-c','user.email=test@example.invalid','commit','-m','fixture'); return git('rev-parse','HEAD'); };
   const revision = commit();
   let trusted = revision;
-  const evidence = { version:'1.0',revision,tree_digest:git('rev-parse','HEAD^{tree}'),workload_id:'security-workload',profile:'node-24',contract_digest:hash(JSON.stringify(contract)),tools:{gitleaks:'8.30.1',osv:'2.6.0'},secrets:{status:'clean',exit_code:0,findings:[]},dependencies:{status:'clean',exit_code:0,findings:[]} };
+  const evidence = { version:'1.0',revision,tree_digest:git('rev-parse','HEAD^{tree}'),workload_id:'security-workload',profile,contract_digest:hash(JSON.stringify(contract)),tools:{gitleaks:'8.30.1',osv:'2.6.0'},secrets:{status:'clean',exit_code:0,findings:[]},dependencies:{status:'clean',exit_code:0,findings:[]} };
   const run = (command='security', extra=[]) => {
     write('evidence.json', evidence);
     const result = spawnSync(process.execPath,[cli,command,'--trusted-revision',trusted,'--trusted-repo',repo,'--contract',join(repo,'factory-contract.yaml'),...(command === 'security' ? ['--evidence',join(repo,'evidence.json')] : []),...extra],{cwd:root,encoding:'utf8',env:{...process.env,GITHUB_STEP_SUMMARY:''}});
@@ -140,4 +144,26 @@ test('pinned dependency scanner denies a known vulnerable locked package', {skip
   assert.equal(result.status,1,result.stdout);
   assert.equal(result.report.results[1].status,'failed');
   assert.ok(result.report.findings.dependencies.some(finding=>finding.package === 'lodash'));
+});
+
+
+test('CLI profile accepts clean security evidence and rejects mismatched or unknown profiles', t => {
+  const f = fixture(t, 'node-24-typescript-cli');
+  const passed = f.run();
+  assert.equal(passed.status, 0, passed.stderr || passed.stdout);
+  assert.ok(passed.report.results.every(result => result.status === 'passed'));
+  for (const profile of ['node-24', 'unrecognized-profile']) {
+    f.evidence.profile = profile;
+    const denied = f.run();
+    assert.equal(denied.status, 1, denied.stdout);
+    assert.equal(denied.report.outcome, 'blocked');
+  }
+});
+
+test('CLI profile still blocks prohibited dependency severity and scanner errors', t => {
+  const f = fixture(t, 'node-24-typescript-cli');
+  f.evidence.dependencies = {status:'findings',exit_code:1,findings:[{package:'fixture',severity:'high',advisory:'GHSA-fixture-only'}]};
+  assert.equal(f.run().report.results[1].status, 'failed');
+  f.evidence.secrets = {status:'error',exit_code:2,findings:[]};
+  assert.equal(f.run().report.outcome, 'blocked');
 });
