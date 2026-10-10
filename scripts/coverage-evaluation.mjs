@@ -1,7 +1,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, relative, resolve, isAbsolute, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { approvedExceptions, digest, document, git } from './policy-evaluation.mjs';
+import { approvedExceptions, digest, document, git, requireWorkloadProfile } from './policy-evaluation.mjs';
 
 /** @typedef {{path: string, source_digest: string, lines: Record<string, number>, branches: Array<{id: string, line: number, end_line: number, hits: number}>}} FileCoverage */
 /** @typedef {{revision: string, status: string, exit_code: number | null}} TestResult */
@@ -31,6 +31,7 @@ export function coverageContext(options) {
   if (isAbsolute(contract.working_directory) || within === '..' || within.startsWith('..' + sep) || isAbsolute(within)) throw new Error('Coverage workload must remain inside the contract directory.');
   const workloadPath = relative(repo, cwd).split(sep).join('/');
   const sourcePath = (workloadPath ? workloadPath + '/' : '') + 'src/';
+  requireWorkloadProfile(trustedRepo, trusted, contract.profile);
   const qualitySource = rawGit(trustedRepo, ['show', `${trusted}:policies/quality.yaml`]);
   const quality = /** @type {{quality: {testing: TestingPolicy, linting: {allow_suppression_comments: boolean}}}} */ (document('quality-policy', qualitySource)).quality;
   const ledger = /** @type {import('./policy-evaluation.mjs').Policy} */ (document('factory-policy', rawGit(trustedRepo, ['show', `${trusted}:policies/enforcement.yaml`])));
@@ -39,7 +40,7 @@ export function coverageContext(options) {
 /** @param {string} repo @param {string} revision @param {string} sourcePath */
 export function sourceFiles(repo, revision, sourcePath) {
   const entries = rawGit(repo, ['ls-tree', '-r', '-z', revision, '--', sourcePath]).split('\0').filter(Boolean);
-  return entries.filter(entry => entry.slice(entry.indexOf('\t') + 1).endsWith('.mjs')).map(entry => {
+  return entries.filter(entry => entry.slice(entry.indexOf('\t') + 1).match(/\.(?:mjs|ts)$/)).map(entry => {
     const [metadata, path] = entry.split('\t');
     if (!/^100(644|755) blob /.test(metadata) || /[\r\n\\]/.test(path)) throw new Error('Unsupported coverage source path or file mode.');
     return path;

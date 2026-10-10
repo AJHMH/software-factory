@@ -18,8 +18,9 @@ export function sastContext(options) {
   // Pre-#7 trusted commits have no CodeQL pack: bootstrap only the fixed supported Node profile.
   const profileSource=git(trustedRepo,['ls-tree',context.trustedRevision,'--','profiles/codeql.yaml']) ? rawGit(trustedRepo,['show',`${context.trustedRevision}:profiles/codeql.yaml`]) : 'version: "1.0"\nprofiles:\n  - id: node-24\n    language: javascript-typescript\n    build_mode: none\n    category: /language:javascript-typescript\n';
   const pack=parse(profileSource);
-  if (pack?.version !== '1.0' || !Array.isArray(pack.profiles) || pack.profiles.length !== 1 || Object.keys(pack).some(key=>!['version','profiles'].includes(key))) throw new Error('Invalid trusted CodeQL profile pack.');
-  const profile=pack.profiles[0];
+  if (pack?.version !== '1.0' || !Array.isArray(pack.profiles) || pack.profiles.length < 1 || new Set(pack.profiles.map((/** @type {{id:string}} */ p)=>p.id)).size !== pack.profiles.length || Object.keys(pack).some(key=>!['version','profiles'].includes(key))) throw new Error('Invalid trusted CodeQL profile pack.');
+  const profile=pack.profiles.find((/** @type {{id:string}} */ p)=>p.id === context.contract.profile);
+  if (!profile) throw new UnsupportedSecurityCapability('Unsupported CodeQL profile.');
   if (profile.id !== context.contract.profile || profile.language !== 'javascript-typescript' || profile.build_mode !== 'none' || profile.category !== '/language:javascript-typescript' || Object.keys(profile).some(key=>!['id','language','build_mode','category','analysis_keys'].includes(key))) throw new UnsupportedSecurityCapability('Unsupported CodeQL profile.');
   const analysisKeys=profile.analysis_keys ?? ['dynamic/github-code-scanning/codeql:analyze'];
   if (!Array.isArray(analysisKeys) || !analysisKeys.length || analysisKeys.length > 10 || new Set(analysisKeys).size !== analysisKeys.length || analysisKeys.some(key=>typeof key !== 'string' || !/^(?:dynamic\/github-code-scanning\/codeql:analyze|\.github\/workflows\/[A-Za-z0-9_-]+\.ya?ml:[A-Za-z0-9_-]+)$/.test(key))) throw new Error('Invalid trusted CodeQL analysis identities.');

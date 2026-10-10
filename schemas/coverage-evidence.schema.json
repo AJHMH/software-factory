@@ -32,7 +32,10 @@
       "pattern": "\\S"
     },
     "profile": {
-      "const": "node-24"
+      "enum": [
+        "node-24",
+        "node-24-typescript-cli"
+      ]
     },
     "contract_digest": {
       "type": "string",
@@ -53,7 +56,7 @@
         "properties": {
           "path": {
             "type": "string",
-            "pattern": "^[^\\\\\\r\\n]+\\.mjs$"
+            "pattern": "^[^\\\\\\r\\n]+\\.(?:mjs|ts)$"
           },
           "source_digest": {
             "type": "string",
@@ -102,9 +105,29 @@
                 }
               }
             },
-            "minItems": 1
+            "minItems": 0
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "path": {
+                  "pattern": "\\.mjs$",
+                  "type": "string"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "branches": {
+                  "minItems": 1,
+                  "type": "array"
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "baseline": {
@@ -134,7 +157,7 @@
             "properties": {
               "path": {
                 "type": "string",
-                "pattern": "^[^\\\\\\r\\n]+\\.mjs$"
+                "pattern": "^[^\\\\\\r\\n]+\\.(?:mjs|ts)$"
               },
               "source_digest": {
                 "type": "string",
@@ -183,9 +206,29 @@
                     }
                   }
                 },
-                "minItems": 1
+                "minItems": 0
               }
-            }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "path": {
+                      "pattern": "\\.mjs$",
+                      "type": "string"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "branches": {
+                      "minItems": 1,
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            ]
           }
         }
       }

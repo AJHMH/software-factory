@@ -8,3 +8,11 @@ profiles:
       - dynamic/github-code-scanning/codeql:analyze
       - .github/workflows/codeql.yml:analyze
       - .github/workflows/factory-codeql.yml:analyze
+  - id: node-24-typescript-cli
+    language: javascript-typescript
+    build_mode: none
+    category: /language:javascript-typescript
+    analysis_keys:
+      - dynamic/github-code-scanning/codeql:analyze
+      - .github/workflows/codeql.yml:analyze
+      - .github/workflows/factory-codeql.yml:analyze

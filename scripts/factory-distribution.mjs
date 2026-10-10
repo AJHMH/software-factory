@@ -28,7 +28,10 @@ export function distributionContext(options) {
     return committed;
   };
   const lock = parse(readConsumer('factory.lock.yaml'));
-  if (lock?.schema_version !== 1 || lock.factory?.repository !== repository || lock.factory.revision !== revision || lock.factory.version !== manifest.version || lock.factory.policy_pack !== manifest.policy_pack || lock.factory.profile !== 'node-24') throw new Error('Consumer version, profile, policy pack, or immutable Factory pin has drifted.');
+  if (lock?.schema_version !== 1 || lock.factory?.repository !== repository || lock.factory.revision !== revision || lock.factory.version !== manifest.version || lock.factory.policy_pack !== manifest.policy_pack || !['node-24', 'node-24-typescript-cli'].includes(lock.factory.profile)) throw new Error('Consumer version, profile, policy pack, or immutable Factory pin has drifted.');
+  const selectedProfile = manifest.profiles[lock.factory.profile];
+  const adapter = lock.factory.profile === 'node-24' ? 'single-module-npm-v1' : 'typescript-cli-npm-v1';
+  if (selectedProfile?.node_major !== '24' || selectedProfile.artifact_adapter !== adapter) throw new Error('Unsupported consumer artifact adapter.');
   const contractPath = join(consumerRepo, 'factory-contract.yaml');
   const contract = /** @type {import('./contract-execution.mjs').Contract} */ (document('factory-contract', readConsumer('factory-contract.yaml')));
   if (contract.contract.profile !== lock.factory.profile || contract.version !== manifest.contract_version || process.versions.node.split('.')[0] !== '24') throw new Error('Unsupported contract/runtime/profile combination; this distribution requires Node 24 and contract 1.0.');

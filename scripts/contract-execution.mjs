@@ -10,7 +10,6 @@ import Ajv from 'ajv';
 
 const schema = JSON.parse(readFileSync(new URL('../schemas/factory-contract.schema.json', import.meta.url), 'utf8'));
 const validator = new Ajv.default({ allErrors: true, strict: true }).compile(schema);
-const profile = { id: 'node-24', language: 'node', nodeVersion: '24', runtimeVersion: '24.x' };
 
 /** @param {string} filename */
 function load(filename) {
@@ -104,6 +103,7 @@ export async function execute(command, cwd) {
 export async function runContract(filename, inspectOnly = false) {
   try {
     const { data, cwd, contractDigest } = load(filename);
+    const profile = { id: data.contract.profile, language: 'node', nodeVersion: '24', runtimeVersion: '24.x' };
     const evidence = revisionEvidence(cwd);
     if (inspectOnly) return { operation: 'profile', outcome: 'passed', profile, workloadId: data.contract.workload_id, ...evidence, contractDigest, results: [] };
     if (process.versions.node.split('.')[0] !== profile.nodeVersion) {

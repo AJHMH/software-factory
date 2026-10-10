@@ -65,7 +65,7 @@
             "pattern": "\\S"
           },
           "profile": {
-            "const": "node-24"
+            "enum": ["node-24", "node-24-typescript-cli"]
           },
           "revision": {
             "type": "string",
