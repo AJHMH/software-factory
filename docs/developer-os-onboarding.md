@@ -43,7 +43,7 @@ rollback adapters do not accept CLI bundles.
    present, explicitly authorize additive, no-bypass default-branch protection,
    one current owner review, stale-review dismissal, resolved threads, signatures,
    linear history, deletion prevention and force-push prevention. Inspect live
-   protections through `bootstrap-governance --mode inspect` and retain its report.
+   protections through `bootstrap-governance` without `--apply true` and retain its report.
 5. Configure an expiring consumer-only `FACTORY_CERTIFICATION_READ_TOKEN` directly
    in GitHub with Administration, Checks, Issues and Pull requests read. Do not
    copy a broad saved CLI credential into a hosted secret or expose it to workload
