@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync, realpathSync, existsSync } from 'node:fs';
 import { join, relative, isAbsolute, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -188,4 +188,50 @@ test('passing unit coverage cannot replace the required integration suite', t =>
   assert.equal(report.metrics.global.lines.percentage, 100);
   assert.ok(report.results.some(gate => gate.capability === 'unit-tests' && gate.status === 'passed'));
   assert.ok(report.results.some(gate => gate.capability === 'integration-tests' && gate.required && gate.status === 'failed'));
+});
+
+test('coverage honors the declared test deadline instead of a hardcoded minute', t => {
+  const f = fixture(t);
+  f.contract.contract.commands.test.timeout_seconds = 1;
+  f.write('factory-contract.yaml', f.contract);
+  f.write('workload/tests/index.test.mjs', "import test from 'node:test'; import assert from 'node:assert/strict'; import { value0 } from '../src/index.mjs'; test('slow unit', async () => { await new Promise(resolve => setTimeout(resolve, 2200)); assert.equal(value0, 0); });\n");
+  f.commit();
+  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', timeout: 20000 });
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.equal(JSON.parse(result.stdout).outcome, 'blocked');
+});
+
+test('coverage rejects a test budget above the independently trusted profile limit', t => {
+  const f = fixture(t);
+  f.contract.contract.commands.test.timeout_seconds = 121;
+  f.write('factory-contract.yaml', f.contract);
+  f.commit();
+  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', timeout: 20000 });
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.equal(JSON.parse(result.stdout).outcome, 'blocked');
+});
+
+test('coverage policy defaults to the contract repository when invoked elsewhere', t => {
+  const f = fixture(t);
+  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', timeout: 20000 });
+  assert.equal(result.status, 0, result.stdout || result.stderr);
+  assert.equal(JSON.parse(result.stdout).outcome, 'passed');
+});
+
+test('coverage refuses a contract changed between context capture and policy evaluation', t => {
+  const f = fixture(t);
+  const marker = join(f.repo, 'dispatch-marker');
+  f.write('workload/tests/index.test.mjs', `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'dispatched');`);
+  f.contract.contract.commands.test.timeout_seconds = 121;
+  f.write('factory-contract.yaml', f.contract);
+  f.commit();
+  const authorized = structuredClone(f.contract);
+  authorized.contract.commands.test.timeout_seconds = 10;
+  const contractPath = join(f.repo, 'factory-contract.yaml');
+  const hook = join(f.repo, 'race-hook.mjs');
+  f.write('race-hook.mjs', `import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module'; const read = fs.readFileSync; let changed = false; fs.readFileSync = function(path, ...args) { const value = read.call(this, path, ...args); if (!changed && String(path) === ${JSON.stringify(contractPath)}) { changed = true; fs.writeFileSync(path, ${JSON.stringify(JSON.stringify(authorized))}); } return value; }; syncBuiltinESMExports();`);
+  const result = spawnSync(process.execPath, ['--import', pathToFileURL(hook).href, cli, 'measure-coverage', '--contract', contractPath, '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', timeout: 20000 });
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.equal(JSON.parse(result.stdout).outcome, 'blocked');
+  assert.equal(existsSync(marker), false, 'mismatched authorization must stop before workload dispatch');
 });

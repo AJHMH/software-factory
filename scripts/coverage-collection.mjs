@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, realpathSync, rmSy
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execute } from './contract-execution.mjs';
-import { digest } from './policy-evaluation.mjs';
+import { digest, evaluatePolicy } from './policy-evaluation.mjs';
 import { coverageContext, sourceFiles, rawGit, evaluateCoverage } from './coverage-evaluation.mjs';
 
 const adapter = fileURLToPath(new URL('../node_modules/c8/bin/c8.js', import.meta.url));
@@ -59,6 +59,10 @@ export async function collectCoverage(options) {
   let scratch;
   try {
     const context = coverageContext(options);
+    const executionPolicy = evaluatePolicy({ ...options, '--trusted-repo': context.trustedRepo, '--trusted-revision': context.trusted });
+    if (executionPolicy.outcome !== 'passed') throw new Error('Coverage test budget is not authorized by trusted execution policy.');
+    if (executionPolicy.contractDigest !== context.contractDigest || executionPolicy.revision !== context.revision || executionPolicy.trustedRevision !== context.trusted) throw new Error('Coverage execution policy does not match the captured contract and revision.');
+    const testTimeoutSeconds = context.contract.commands.test.timeout_seconds;
     if (process.versions.node.split('.')[0] !== '24') throw new Error('Coverage adapter requires Node 24.');
     scratch = resolve(context.repo, 'tmp');
     mkdirSync(scratch, { recursive: true });
@@ -94,7 +98,7 @@ export async function collectCoverage(options) {
         ? (name === 'unit' ? testFiles(snapshots.head, 'tests').filter(file => !file.endsWith('delivery.test.mjs')) : testFiles(snapshots.head, 'tests').filter(file => file.endsWith('delivery.test.mjs')))
         : testFiles(snapshots.head, path);
       if (files.length) {
-        const result = await execute({ run: `${node} --test ${files.map(quote).join(' ')}`, timeout_seconds: 60 }, snapshots.head);
+        const result = await execute({ run: `${node} --test ${files.map(quote).join(' ')}`, timeout_seconds: testTimeoutSeconds }, snapshots.head);
         tests[/** @type {'unit'|'integration'} */ (name)] = { revision: context.revision, status: result.status, exit_code: result.exitCode };
       }
     }
@@ -105,7 +109,7 @@ export async function collectCoverage(options) {
       if (!files.length) throw new Error('Coverage baseline or candidate has no runnable tests.');
       const reports = join(directory, name + '-report');
       const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote(context.contract.profile === 'node-24-typescript-cli' ? 'src/**/*.ts' : 'src/**/*.mjs')} --extension .mjs --extension .ts ${context.contract.profile === 'node-24-typescript-cli' ? '--extension .js --exclude-after-remap' : ''} --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test ${files.map(quote).join(' ')}`;
-      const result = await execute({ run, timeout_seconds: 60 }, cwd);
+      const result = await execute({ run, timeout_seconds: testTimeoutSeconds }, cwd);
       if (result.status !== 'passed') throw new Error(`${name} coverage instrumentation failed or timed out; evidence cannot pass.`);
       measured.push(evidenceFiles(context, revision, cwd, reports));
     }
