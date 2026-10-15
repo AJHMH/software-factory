@@ -235,3 +235,42 @@ test('coverage refuses a contract changed between context capture and policy eva
   assert.equal(JSON.parse(result.stdout).outcome, 'blocked');
   assert.equal(existsSync(marker), false, 'mismatched authorization must stop before workload dispatch');
 });
+
+test('coverage collector runs complete suites with exactly four bounded file workers', t => {
+  const f = fixture(t);
+  for (let index = 0; index < 8; index++) {
+    f.write(`workload/tests/parallel-${index}.test.mjs`, `
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { setTimeout } from 'node:timers/promises';
+test('isolated file ${index}', async () => {
+  const root = join(process.cwd(), '.workers-' + process.ppid);
+  const active = join(root, 'active');
+  const batch = join(root, 'batch-${Math.floor(index / 4)}');
+  mkdirSync(active, { recursive: true }); mkdirSync(batch, { recursive: true });
+  const marker = join(active, '${index}');
+  writeFileSync(marker, ''); writeFileSync(join(batch, '${index}'), '');
+  try {
+    const deadline = Date.now() + 2000;
+    while (readdirSync(batch).length < 4 && Date.now() < deadline) {
+      assert.ok(readdirSync(active).length <= 4, 'more than four active file workers');
+      await setTimeout(10);
+    }
+    assert.equal(readdirSync(batch).length, 4, 'four workers must reach the batch barrier');
+    await setTimeout(100);
+    assert.ok(readdirSync(active).length <= 4, 'more than four active file workers');
+  } finally { rmSync(marker, { force: true }); }
+});
+`);
+  }
+  f.git('add', 'workload/tests');
+  const revision = f.commit();
+  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', revision, '--output', join(f.repo, 'parallel-evidence.json')], { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.outcome, 'passed');
+  assert.ok(report.results.some(gate => gate.capability === 'unit-tests' && gate.status === 'passed'));
+  assert.ok(report.results.some(gate => gate.capability === 'integration-tests' && gate.status === 'passed'));
+});

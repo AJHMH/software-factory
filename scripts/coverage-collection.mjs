@@ -98,7 +98,7 @@ export async function collectCoverage(options) {
         ? (name === 'unit' ? testFiles(snapshots.head, 'tests').filter(file => !file.endsWith('delivery.test.mjs')) : testFiles(snapshots.head, 'tests').filter(file => file.endsWith('delivery.test.mjs')))
         : testFiles(snapshots.head, path);
       if (files.length) {
-        const result = await execute({ run: `${node} --test ${files.map(quote).join(' ')}`, timeout_seconds: testTimeoutSeconds }, snapshots.head);
+        const result = await execute({ run: `${node} --test --test-concurrency=4 ${files.map(quote).join(' ')}`, timeout_seconds: testTimeoutSeconds }, snapshots.head);
         tests[/** @type {'unit'|'integration'} */ (name)] = { revision: context.revision, status: result.status, exit_code: result.exitCode };
       }
     }
@@ -108,7 +108,7 @@ export async function collectCoverage(options) {
       const files = [...testFiles(cwd, 'tests'), ...testFiles(cwd, 'tests/integration')];
       if (!files.length) throw new Error('Coverage baseline or candidate has no runnable tests.');
       const reports = join(directory, name + '-report');
-      const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote(context.contract.profile === 'node-24-typescript-cli' ? 'src/**/*.ts' : 'src/**/*.mjs')} --extension .mjs --extension .ts ${context.contract.profile === 'node-24-typescript-cli' ? '--extension .js --exclude-after-remap' : ''} --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test ${files.map(quote).join(' ')}`;
+      const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote(context.contract.profile === 'node-24-typescript-cli' ? 'src/**/*.ts' : 'src/**/*.mjs')} --extension .mjs --extension .ts ${context.contract.profile === 'node-24-typescript-cli' ? '--extension .js --exclude-after-remap' : ''} --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test --test-concurrency=4 ${files.map(quote).join(' ')}`;
       const result = await execute({ run, timeout_seconds: testTimeoutSeconds }, cwd);
       if (result.status !== 'passed') throw new Error(`${name} coverage instrumentation failed or timed out; evidence cannot pass.`);
       measured.push(evidenceFiles(context, revision, cwd, reports));
