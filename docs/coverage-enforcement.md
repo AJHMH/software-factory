@@ -54,7 +54,11 @@ stale. Contract digests cover the exact selected contract file bytes.
 
 Unit tests are `tests/*.test.mjs`; integration tests are
 `tests/integration/*.test.mjs`. Each suite is executed and recorded separately;
-aggregate coverage runs both suites together. Baseline coverage runs whatever suites
+aggregate coverage runs both suites together. The trusted adapter explicitly bounds
+Node file concurrency at four for both separate test execution and instrumented
+head/baseline measurement. It runs the complete discovered inventory and retains
+the existing governed command deadlines; workload npm flags do not configure the
+collector. Baseline coverage runs whatever suites
 exist in that baseline; required suite checks apply to the candidate. The reference
 workload's integration test exercises its API from a separate Node process.
 
