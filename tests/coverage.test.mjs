@@ -221,7 +221,7 @@ test('coverage policy defaults to the contract repository when invoked elsewhere
 test('coverage refuses a contract changed between context capture and policy evaluation', t => {
   const f = fixture(t);
   const marker = join(f.repo, 'dispatch-marker');
-  f.write('workload/tests/index.test.mjs', `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'dispatched');`);
+  f.write('workload/tests/index.test.mjs', "import { writeFileSync } from 'node:fs'; writeFileSync(String(process.env.FACTORY_TEST_MARKER), 'dispatched');");
   f.contract.contract.commands.test.timeout_seconds = 121;
   f.write('factory-contract.yaml', f.contract);
   f.commit();
@@ -229,8 +229,8 @@ test('coverage refuses a contract changed between context capture and policy eva
   authorized.contract.commands.test.timeout_seconds = 10;
   const contractPath = join(f.repo, 'factory-contract.yaml');
   const hook = join(f.repo, 'race-hook.mjs');
-  f.write('race-hook.mjs', `import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module'; const read = fs.readFileSync; let changed = false; fs.readFileSync = function(path, ...args) { const value = read.call(this, path, ...args); if (!changed && String(path) === ${JSON.stringify(contractPath)}) { changed = true; fs.writeFileSync(path, ${JSON.stringify(JSON.stringify(authorized))}); } return value; }; syncBuiltinESMExports();`);
-  const result = spawnSync(process.execPath, ['--import', pathToFileURL(hook).href, cli, 'measure-coverage', '--contract', contractPath, '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', timeout: 20000 });
+  f.write('race-hook.mjs', "import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module'; const read = fs.readFileSync; let changed = false; fs.readFileSync = function(path, ...args) { const value = read.call(this, path, ...args); if (!changed && String(path) === process.env.FACTORY_TEST_CONTRACT) { changed = true; fs.writeFileSync(path, String(process.env.FACTORY_TEST_AUTHORIZED)); } return value; }; syncBuiltinESMExports();");
+  const result = spawnSync(process.execPath, ['--import', pathToFileURL(hook).href, cli, 'measure-coverage', '--contract', contractPath, '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', timeout: 20000, env: { ...process.env, FACTORY_TEST_MARKER: marker, FACTORY_TEST_CONTRACT: contractPath, FACTORY_TEST_AUTHORIZED: JSON.stringify(authorized) } });
   assert.notEqual(result.status, 0, result.stdout);
   assert.equal(JSON.parse(result.stdout).outcome, 'blocked');
   assert.equal(existsSync(marker), false, 'mismatched authorization must stop before workload dispatch');
