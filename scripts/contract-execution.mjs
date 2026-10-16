@@ -4,6 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { parse } from 'yaml';
 import Ajv from 'ajv';
+import { startResourceDiagnostics } from './command-resource-diagnostics.mjs';
 
 /** @typedef {{run: string, timeout_seconds: number}} Command */
 /** @typedef {{version: string, contract: {workload_id: string, profile: string, working_directory: string, commands: Record<string, Command>}}} Contract */
@@ -74,10 +75,13 @@ export async function execute(command, cwd) {
         child.stdout.destroy();
         child.stderr.destroy();
         child.unref();
-        done({ status: 'failed', exitCode: null, signal: null, timedOut, terminationFailed, startedAt,
+        finish({ status: 'failed', exitCode: null, signal: null, timedOut, terminationFailed, startedAt,
           finishedAt: new Date().toISOString(), stdout, stderr: 'Process-tree termination failed; operator cleanup is required.', truncated });
       }
     }, command.timeout_seconds * 1000);
+    const stopDiagnostics = startResourceDiagnostics();
+    /** @param {object} result */
+    function finish(result) { done({ ...result, resourceDiagnostics: stopDiagnostics() }); }
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
@@ -90,11 +94,11 @@ export async function execute(command, cwd) {
     });
     child.on('error', (error) => {
       clearTimeout(timer);
-      done({ status: 'failed', exitCode: null, signal: null, timedOut, terminationFailed, startedAt, finishedAt: new Date().toISOString(), stdout, stderr: error.message, truncated });
+      finish({ status: 'failed', exitCode: null, signal: null, timedOut, terminationFailed, startedAt, finishedAt: new Date().toISOString(), stdout, stderr: error.message, truncated });
     });
     child.on('close', (exitCode, signal) => {
       clearTimeout(timer);
-      done({ status: exitCode === 0 && !timedOut ? 'passed' : 'failed', exitCode, signal, timedOut, terminationFailed, startedAt, finishedAt: new Date().toISOString(), stdout, stderr, truncated });
+      finish({ status: exitCode === 0 && !timedOut ? 'passed' : 'failed', exitCode, signal, timedOut, terminationFailed, startedAt, finishedAt: new Date().toISOString(), stdout, stderr, truncated });
     });
   });
 }
