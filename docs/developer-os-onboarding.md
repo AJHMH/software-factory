@@ -91,3 +91,37 @@ branch protection or Actions variables. On unchanged main, typecheck and all 65
 tests passed outside the Windows filesystem sandbox; formatting failed on 29
 files and the owner authorized formatting cleanup. These observations do not
 establish live signing, hosted CI, governance compliance or certification.
+
+## Coverage diagnostics and approval evidence reuse
+
+`measure-coverage` records each executed install, build, separate test and
+instrumentation stage in its JSON report under `diagnostics.stages`. Each record
+includes start/end times, duration, exit code, signal, deadline and process-tree
+termination status, and output truncation. Failed stages also retain bounded
+stdout/stderr (at most 65,536 characters each). Known secret-bearing environment
+values and GitHub token patterns are redacted; do not deliberately print secrets
+from workload tests. Successful stage output is omitted. Diagnostics explain
+execution; they never supply approval or alter policy evaluation.
+
+The collector report is retained in the existing gate artifact even when the
+command fails. Coverage evidence keeps its existing strict schema and revision
+bindings. The collector still performs every existing required suite and
+instrumented measurement under the same command budgets.
+
+The reusable consumer workflow produces source coverage once. When source and
+reviewed head match, a reviewed-head preparation job downloads that exact
+same-run immutable artifact ID and re-evaluates it. On main pushes, the merge
+revision and reviewed PR head can differ; the latter is measured separately
+once for both approval jobs. Neither approval job reruns workload tests.
+
+Both approval jobs retain their required names, read-only review permissions,
+immutable Factory adoption inspection, and independent current-owner review
+evaluation. They fail explicitly if their evidence producer failed, was skipped,
+or supplied no exact artifact ID. Local evidence is revalidated for head, base,
+contract, source and current trusted policy. No evidence from another workflow
+run, arbitrary artifact name, or prior review is substituted. Approval refresh
+reruns those same checks and consumes their original producer output.
+
+This removes two repeated collections on PRs and one on main pushes; it does not
+remove the first collection's cost or diagnose the intermittent failure itself.
+Use failed-stage diagnostics to identify that cause before changing scheduling.

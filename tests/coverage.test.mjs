@@ -95,6 +95,8 @@ test('the Node adapter collects actual committed baseline/head coverage and sepa
   assert.equal(report.outcome, 'passed');
   assert.equal(report.metrics.global.lines.percentage, 100);
   assert.equal(report.metrics.changed.lines.percentage, 100);
+  assert.deepEqual(report.diagnostics.stages.map(s => s.phase), ['unit-tests', 'integration-tests', 'head-instrumentation', 'base-instrumentation']);
+  assert.ok(report.diagnostics.stages.every(s => s.status === 'passed' && s.durationMs >= 0 && !('stdout' in s) && !('stderr' in s)));
   assert.ok(report.results.some(gate => gate.capability === 'unit-tests' && gate.status === 'passed'));
   assert.ok(report.results.some(gate => gate.capability === 'integration-tests' && gate.status === 'passed'));
 });
@@ -273,4 +275,41 @@ test('isolated file ${index}', async () => {
   assert.equal(report.outcome, 'passed');
   assert.ok(report.results.some(gate => gate.capability === 'unit-tests' && gate.status === 'passed'));
   assert.ok(report.results.some(gate => gate.capability === 'integration-tests' && gate.status === 'passed'));
+});
+
+test('measurement retains stage timings and bounded redacted failures through its public command', t => {
+  const f = fixture(t);
+  f.write('workload/tests/index.test.mjs', "import test from 'node:test'; test('diagnostic failure', () => { console.error('fixture failure ' + process.env.FACTORY_DIAGNOSTIC_SECRET); console.error('x'.repeat(70000)); throw Error('intentional failure'); });\n");
+  f.commit();
+  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', env: { ...process.env, FACTORY_DIAGNOSTIC_SECRET: 'diagnostic-secret-sentinel-12345' }, timeout: 20000 });
+  assert.equal(result.status, 1);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.outcome, 'blocked');
+  const stage = report.diagnostics.stages.find(s => s.phase === 'unit-tests');
+  assert.equal(stage.status, 'failed');
+  assert.equal(stage.exitCode, 1);
+  assert.equal(stage.timedOut, false);
+  assert.ok(stage.durationMs >= 0);
+  assert.equal(stage.durationMs, Date.parse(stage.finishedAt) - Date.parse(stage.startedAt));
+  assert.equal(stage.truncated, true);
+  assert.match(stage.stdout + stage.stderr, /fixture failure <REDACTED>/);
+  assert.ok(stage.stdout.length <= 65536 && stage.stderr.length <= 65536);
+  assert.ok(!result.stdout.includes('diagnostic-secret-sentinel-12345'));
+  assert.equal(report.diagnostics.stages.at(-1).phase, 'head-instrumentation');
+  assert.equal(report.diagnostics.stages.at(-1).status, 'failed');
+});
+
+test('measurement distinguishes a stage deadline from a nonzero test exit', t => {
+  const f = fixture(t);
+  f.contract.contract.commands.test.timeout_seconds = 1;
+  f.write('factory-contract.yaml', f.contract);
+  f.write('workload/tests/index.test.mjs', "import test from 'node:test'; test('deadline', async () => { await new Promise(resolve => setTimeout(resolve, 5000)); });\n");
+  f.commit();
+  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', timeout: 20000 });
+  assert.equal(result.status, 1);
+  const stage = JSON.parse(result.stdout).diagnostics.stages.find(s => s.phase === 'unit-tests');
+  assert.equal(stage.timedOut, true);
+  assert.equal(stage.exitCode, null);
+  assert.equal(stage.signal, 'SIGKILL');
+  assert.ok(stage.durationMs >= 1000);
 });

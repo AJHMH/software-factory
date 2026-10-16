@@ -57,6 +57,21 @@ export async function collectCoverage(options) {
   let directory;
   /** @type {string | undefined} */
   let scratch;
+  /** @type {Array<Omit<Awaited<ReturnType<typeof execute>>, 'stdout' | 'stderr'> & {phase:string,durationMs:number,stdout?:string,stderr?:string}>} */
+  const stages = [];
+  // Diagnostic data never participates in policy evaluation or test authority.
+  const secrets = Object.entries(process.env).flatMap(([key, value]) => /secret|token|password|credential|authorization|private.?key/i.test(key) && value && value.length >= 8 ? [value] : []).sort((a, b) => b.length - a.length);
+  /** @param {string} text */
+  const redact = text => secrets.reduce((value, secret) => value.replaceAll(secret, '<REDACTED>'), text).replace(/(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)/g, '<REDACTED>').slice(0, 65536);
+  /** @param {string} phase @param {import('./contract-execution.mjs').Command} command @param {string} cwd */
+  async function runStage(phase, command, cwd) {
+    const result = await execute(command, cwd);
+    stages.push({ phase, status: result.status, startedAt: result.startedAt, finishedAt: result.finishedAt,
+      durationMs: Date.parse(result.finishedAt) - Date.parse(result.startedAt), exitCode: result.exitCode,
+      signal: result.signal, timedOut: result.timedOut, terminationFailed: result.terminationFailed,
+      truncated: result.truncated, ...(result.status === 'passed' ? {} : { stdout: redact(result.stdout), stderr: redact(result.stderr) }) });
+    return result;
+  }
   try {
     const context = coverageContext(options);
     const executionPolicy = evaluatePolicy({ ...options, '--trusted-repo': context.trustedRepo, '--trusted-revision': context.trusted });
@@ -81,10 +96,10 @@ export async function collectCoverage(options) {
       try {
         const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8'));
         if (Object.keys(manifest.dependencies ?? {}).length || context.contract.profile === 'node-24-typescript-cli') {
-          const install = await execute({ run: 'npm ci --ignore-scripts', timeout_seconds: 120 }, cwd);
+          const install = await runStage(`${name}-install`, { run: 'npm ci --ignore-scripts', timeout_seconds: 120 }, cwd);
           if (install.status !== 'passed') throw new Error('Snapshot dependency installation failed or timed out.');
           if (context.contract.profile === 'node-24-typescript-cli') {
-            const build = await execute({ run: 'node node_modules/typescript/bin/tsc', timeout_seconds: 120 }, cwd);
+            const build = await runStage(`${name}-build`, { run: 'node node_modules/typescript/bin/tsc', timeout_seconds: 120 }, cwd);
             if (build.status !== 'passed') throw new Error('Snapshot TypeScript compilation failed.');
           }
         }
@@ -98,7 +113,7 @@ export async function collectCoverage(options) {
         ? (name === 'unit' ? testFiles(snapshots.head, 'tests').filter(file => !file.endsWith('delivery.test.mjs')) : testFiles(snapshots.head, 'tests').filter(file => file.endsWith('delivery.test.mjs')))
         : testFiles(snapshots.head, path);
       if (files.length) {
-        const result = await execute({ run: `${node} --test --test-concurrency=4 ${files.map(quote).join(' ')}`, timeout_seconds: testTimeoutSeconds }, snapshots.head);
+        const result = await runStage(`${name}-tests`, { run: `${node} --test --test-concurrency=4 ${files.map(quote).join(' ')}`, timeout_seconds: testTimeoutSeconds }, snapshots.head);
         tests[/** @type {'unit'|'integration'} */ (name)] = { revision: context.revision, status: result.status, exit_code: result.exitCode };
       }
     }
@@ -109,15 +124,15 @@ export async function collectCoverage(options) {
       if (!files.length) throw new Error('Coverage baseline or candidate has no runnable tests.');
       const reports = join(directory, name + '-report');
       const run = `${node} ${quote(adapter)} --config ${quote(config)} --all --src src --include ${quote(context.contract.profile === 'node-24-typescript-cli' ? 'src/**/*.ts' : 'src/**/*.mjs')} --extension .mjs --extension .ts ${context.contract.profile === 'node-24-typescript-cli' ? '--extension .js --exclude-after-remap' : ''} --reporter json --reports-dir ${quote(reports)} --temp-directory ${quote(join(directory, name + '-v8'))} ${node} --test --test-concurrency=4 ${files.map(quote).join(' ')}`;
-      const result = await execute({ run, timeout_seconds: testTimeoutSeconds }, cwd);
+      const result = await runStage(`${name}-instrumentation`, { run, timeout_seconds: testTimeoutSeconds }, cwd);
       if (result.status !== 'passed') throw new Error(`${name} coverage instrumentation failed or timed out; evidence cannot pass.`);
       measured.push(evidenceFiles(context, revision, cwd, reports));
     }
     const evidence = { version: '1.0', revision: context.revision, base_revision: context.base, workload_id: context.contract.workload_id, profile: context.contract.profile, contract_digest: context.contractDigest, files: measured[0], baseline: { revision: context.base, files: measured[1] }, tests };
     if (options['--output']) writeFileSync(options['--output'], JSON.stringify(evidence, null, 2) + '\n');
-    return evaluateCoverage(options, evidence);
+    return { ...evaluateCoverage(options, evidence), diagnostics: { stages } };
   } catch (error) {
-    return { operation: 'coverage', outcome: 'blocked', results: [{ capability: 'coverage', required: true, status: 'failed', reason: error instanceof Error ? error.message : String(error) }] };
+    return { operation: 'coverage', outcome: 'blocked', diagnostics: { stages }, results: [{ capability: 'coverage', required: true, status: 'failed', reason: error instanceof Error ? error.message : String(error) }] };
   } finally {
     if (directory && scratch) {
       const target = realpathSync(directory), within = relative(scratch, target);
