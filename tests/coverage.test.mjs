@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync, realpathSync, existsSync } from 'node:fs';
 import { join, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -279,9 +279,10 @@ test('isolated file ${index}', async () => {
 
 test('measurement retains stage timings and bounded redacted failures through its public command', t => {
   const f = fixture(t);
+  const sentinel = randomBytes(24).toString('hex');
   f.write('workload/tests/index.test.mjs', "import test from 'node:test'; test('diagnostic failure', () => { console.error('fixture failure ' + process.env.FACTORY_DIAGNOSTIC_SECRET); console.error('x'.repeat(70000)); throw Error('intentional failure'); });\n");
   f.commit();
-  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', env: { ...process.env, FACTORY_DIAGNOSTIC_SECRET: 'diagnostic-secret-sentinel-12345' }, timeout: 20000 });
+  const result = spawnSync(process.execPath, [cli, 'measure-coverage', '--contract', join(f.repo, 'factory-contract.yaml'), '--trusted-repo', f.repo, '--trusted-revision', f.base, '--base-revision', f.base], { cwd: root, encoding: 'utf8', env: { ...process.env, FACTORY_DIAGNOSTIC_SECRET: sentinel }, timeout: 20000 });
   assert.equal(result.status, 1);
   const report = JSON.parse(result.stdout);
   assert.equal(report.outcome, 'blocked');
@@ -294,7 +295,7 @@ test('measurement retains stage timings and bounded redacted failures through it
   assert.equal(stage.truncated, true);
   assert.match(stage.stdout + stage.stderr, /fixture failure <REDACTED>/);
   assert.ok(stage.stdout.length <= 65536 && stage.stderr.length <= 65536);
-  assert.ok(!result.stdout.includes('diagnostic-secret-sentinel-12345'));
+  assert.ok(!result.stdout.includes(sentinel));
   assert.equal(report.diagnostics.stages.at(-1).phase, 'head-instrumentation');
   assert.equal(report.diagnostics.stages.at(-1).status, 'failed');
 });
