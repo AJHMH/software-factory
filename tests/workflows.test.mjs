@@ -323,3 +323,57 @@ test('consumer reusable gates retain all baseline checks and isolate certificati
  assert.equal(workflow.jobs.sast.permissions['security-events'],'read');
  assert.match(workflow.jobs.sast.steps.find(step=>step.env?.FACTORY_GITHUB_TOKEN).run,/--analysis-key .github\/workflows\/factory-codeql.yml:analyze/);
 });
+
+test('consumer approval gates reuse only the immutable same-run reviewed-head coverage artifact', () => {
+ const workflow = parse(readFileSync(join(root, '.github/workflows/factory-consumer-validation.yml'), 'utf8'));
+ const coverage = workflow.jobs.coverage;
+ assert.equal(coverage.outputs.evidence_artifact, '${{ steps.evidence.outputs.artifact-id }}');
+ assert.equal(coverage.steps.find(s => s.id === 'evidence').uses, 'actions/upload-artifact@v4');
+ assert.ok(coverage.steps.find(s => s.id === 'evidence').with.name.endsWith('-${{ github.run_attempt }}'));
+
+ const producer = workflow.jobs['review-coverage'];
+ assert.deepEqual(producer.needs, ['context', 'coverage']);
+ assert.equal(producer.permissions['pull-requests'], undefined);
+ assert.equal(producer.outputs.evidence_artifact, '${{ steps.evidence.outputs.artifact-id }}');
+ assert.ok(producer.steps.find(s => s.id === 'evidence').with.name.endsWith('-${{ github.run_attempt }}'));
+
+ const download = producer.steps.find(s => s.uses === 'actions/download-artifact@v4');
+ assert.equal(download.if, '${{ inputs.source_revision == needs.context.outputs.head }}');
+ assert.equal(download.with['artifact-ids'], '${{ needs.coverage.outputs.evidence_artifact }}');
+ assert.equal(download.with['merge-multiple'], true);
+ assert.equal(download.with['run-id'], undefined);
+ assert.equal(download.with['github-token'], undefined);
+ const collect = producer.steps.find(s => s.run?.includes('measure-coverage'));
+ assert.equal(collect.if, '${{ inputs.source_revision != needs.context.outputs.head }}');
+ assert.equal(producer.steps.find(s => s.with?.path === 'consumer').with.ref, '${{ needs.context.outputs.head }}');
+ assert.ok(producer.steps.some(s => s.run?.includes(' coverage ') && s.run.includes('--evidence tmp/gates/coverage-evidence.json')));
+ for (const key of ['human', 'trusted-human']) {
+   const job = workflow.jobs[key];
+   assert.deepEqual(job.needs, ['context', 'review-coverage']);
+   assert.equal(job.if, '${{ always() }}');
+   const preflight = job.steps[0];
+   assert.equal(preflight.env.EVIDENCE_RESULT, '${{ needs.review-coverage.result }}');
+   assert.equal(preflight.env.CONTEXT_RESULT, '${{ needs.context.result }}');
+   assert.equal(preflight.env.EVIDENCE_ARTIFACT, '${{ needs.review-coverage.outputs.evidence_artifact }}');
+   assert.ok(preflight.run.includes('= success') && preflight.run.includes('^[1-9][0-9]*$'));
+   for (const scenario of [
+     { CONTEXT_RESULT: 'success', EVIDENCE_RESULT: 'success', EVIDENCE_ARTIFACT: '12345', expected: 0 },
+     ...['failure', 'skipped', 'cancelled', ''].map(status => ({ CONTEXT_RESULT: 'success', EVIDENCE_RESULT: status, EVIDENCE_ARTIFACT: '12345', expected: 1 })),
+     { CONTEXT_RESULT: 'failure', EVIDENCE_RESULT: 'success', EVIDENCE_ARTIFACT: '12345', expected: 1 },
+     ...['', '0', '*', '123,456'].map(id => ({ CONTEXT_RESULT: 'success', EVIDENCE_RESULT: 'success', EVIDENCE_ARTIFACT: id, expected: 1 })),
+   ]) {
+     const result = spawnSync('/bin/bash', ['-e', '-c', preflight.run], { encoding: 'utf8', env: { ...process.env, ...scenario } });
+     assert.equal(result.status, scenario.expected, JSON.stringify(scenario));
+   }
+
+   assert.ok(!job.steps.some(s => s.run?.includes('measure-coverage')));
+   const input = job.steps.find(s => s.uses === 'actions/download-artifact@v4');
+   assert.equal(input.with['artifact-ids'], '${{ needs.review-coverage.outputs.evidence_artifact }}');
+   assert.equal(input.with['merge-multiple'], true);
+   assert.equal(input.with['run-id'], undefined);
+   const review = job.steps.find(s => s.run?.includes('collect-reviews'));
+   assert.ok(review.run.includes('--coverage-evidence tmp/gates/coverage-evidence.json'));
+   assert.equal(review.env.BASE, '${{ needs.context.outputs.base }}');
+   assert.equal(review.env.FACTORY_REVISION, '${{ job.workflow_sha }}');
+ }
+});

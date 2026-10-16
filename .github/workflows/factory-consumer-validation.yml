@@ -274,6 +274,8 @@ jobs:
   coverage:
     name: Enforce Factory coverage
     needs: context
+    outputs:
+      evidence_artifact: ${{ steps.evidence.outputs.artifact-id }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -321,9 +323,10 @@ jobs:
           SOURCE_REF: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
         run: node scripts/factory-validation.mjs measure-coverage --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --output tmp/gates/coverage-evidence.json > tmp/gates/coverage.json
       - if: always()
+        id: evidence
         uses: actions/upload-artifact@v4
         with:
-          name: factory-consumer-coverage-${{ inputs.source_revision }}-${{ github.run_id }}
+          name: factory-consumer-coverage-${{ inputs.source_revision }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: factory/tmp/gates
           if-no-files-found: warn
           retention-days: 90
@@ -443,14 +446,15 @@ jobs:
           path: factory/tmp/gates
           if-no-files-found: warn
           retention-days: 90
-  human:
-    name: Enforce Factory human approval
-    needs: context
+  review-coverage:
+    name: Prepare reviewed-head coverage evidence
+    needs: [context, coverage]
+    outputs:
+      evidence_artifact: ${{ steps.evidence.outputs.artifact-id }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
     steps:
       - name: Check out executing Factory
         uses: actions/checkout@v4
@@ -482,11 +486,83 @@ jobs:
         run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
       - working-directory: factory
         run: mkdir -p tmp/gates
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.source_revision == needs.context.outputs.head }}
+        with:
+          artifact-ids: ${{ needs.coverage.outputs.evidence_artifact }}
+          merge-multiple: true
+          path: factory/tmp/gates
       - working-directory: factory
+        if: ${{ inputs.source_revision != needs.context.outputs.head }}
         env:
           FACTORY_REVISION: ${{ job.workflow_sha }}
           BASE: ${{ needs.context.outputs.base }}
         run: node scripts/factory-validation.mjs measure-coverage --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --output tmp/gates/coverage-evidence.json > tmp/gates/head-coverage.json
+      - name: Revalidate exact reviewed-head evidence
+        working-directory: factory
+        env:
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          BASE: ${{ needs.context.outputs.base }}
+        run: node scripts/factory-validation.mjs coverage --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --evidence tmp/gates/coverage-evidence.json > tmp/gates/reviewed-coverage.json
+      - if: always()
+        id: evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-consumer-reviewed-head-${{ inputs.source_revision }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: factory/tmp/gates
+          if-no-files-found: warn
+          retention-days: 90
+  human:
+    name: Enforce Factory human approval
+    needs: [context, review-coverage]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Require successful exact evidence producer
+        env:
+          CONTEXT_RESULT: ${{ needs.context.result }}
+          EVIDENCE_RESULT: ${{ needs.review-coverage.result }}
+          EVIDENCE_ARTIFACT: ${{ needs.review-coverage.outputs.evidence_artifact }}
+        run: test "$CONTEXT_RESULT" = success && test "$EVIDENCE_RESULT" = success && [[ "$EVIDENCE_ARTIFACT" =~ ^[1-9][0-9]*$ ]]
+      - name: Check out executing Factory
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: factory
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out exact consumer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.context.outputs.head }}
+          path: consumer
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - working-directory: factory
+        run: npm ci --ignore-scripts
+      - name: Inspect immutable adoption
+        working-directory: factory
+        env:
+          FACTORY_REPOSITORY: ${{ job.workflow_repository }}
+          FACTORY_REVISION: ${{ job.workflow_sha }}
+          APPROVED_REVISION: ${{ vars.FACTORY_DISTRIBUTION_REVISION }}
+          SOURCE_REVISION: ${{ needs.context.outputs.head }}
+        run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
+      - working-directory: factory
+        run: mkdir -p tmp/gates
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.review-coverage.outputs.evidence_artifact }}
+          merge-multiple: true
+          path: factory/tmp/gates
       - name: Enforce pinned Factory gate
         working-directory: factory
         env:
@@ -504,19 +580,26 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: factory-consumer-human-${{ inputs.source_revision }}-${{ github.run_id }}
+          name: factory-consumer-human-${{ inputs.source_revision }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: factory/tmp/gates
           if-no-files-found: warn
           retention-days: 90
   trusted-human:
     name: Enforce Factory trusted human approval
-    needs: context
+    needs: [context, review-coverage]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
     steps:
+      - name: Require successful exact evidence producer
+        env:
+          CONTEXT_RESULT: ${{ needs.context.result }}
+          EVIDENCE_RESULT: ${{ needs.review-coverage.result }}
+          EVIDENCE_ARTIFACT: ${{ needs.review-coverage.outputs.evidence_artifact }}
+        run: test "$CONTEXT_RESULT" = success && test "$EVIDENCE_RESULT" = success && [[ "$EVIDENCE_ARTIFACT" =~ ^[1-9][0-9]*$ ]]
       - name: Check out executing Factory
         uses: actions/checkout@v4
         with:
@@ -547,11 +630,11 @@ jobs:
         run: node scripts/factory-validation.mjs distribution --mode inspect --trusted-repo . --trusted-revision "$FACTORY_REVISION" --factory-repository "$FACTORY_REPOSITORY" --approved-revision "$APPROVED_REVISION" --consumer-repo ../consumer --source-revision "$SOURCE_REVISION"
       - working-directory: factory
         run: mkdir -p tmp/gates
-      - working-directory: factory
-        env:
-          FACTORY_REVISION: ${{ job.workflow_sha }}
-          BASE: ${{ needs.context.outputs.base }}
-        run: node scripts/factory-validation.mjs measure-coverage --trusted-repo . --trusted-revision "$FACTORY_REVISION" --contract ../consumer/factory-contract.yaml --base-revision "$BASE" --output tmp/gates/coverage-evidence.json > tmp/gates/head-coverage.json
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.review-coverage.outputs.evidence_artifact }}
+          merge-multiple: true
+          path: factory/tmp/gates
       - name: Enforce pinned Factory gate
         working-directory: factory
         env:
@@ -569,7 +652,7 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: factory-consumer-trusted-human-${{ inputs.source_revision }}-${{ github.run_id }}
+          name: factory-consumer-trusted-human-${{ inputs.source_revision }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: factory/tmp/gates
           if-no-files-found: warn
           retention-days: 90
