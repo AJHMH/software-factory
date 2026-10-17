@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { certifyRelease } from '../scripts/release-certification.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -229,4 +231,60 @@ test('CLI coverage remaps executed JavaScript to TypeScript and cannot omit unus
   const denied = spawnSync(process.execPath, args, { encoding: 'utf8' });
   assert.equal(denied.status, 1);
   assert.match(JSON.parse(denied.stdout).results[0].reason, /not authorized/);
+});
+
+function certificationFixture(t) {
+  const f = fixture(t), repository = 'owner/consumer';
+  const base = f.git(f.consumer, 'rev-parse', 'HEAD');
+  writeFileSync(join(f.consumer, 'workload/src/index.mjs'), 'export const consumer = "reviewed";\n');
+  const head = f.commit(f.consumer);
+  const tree = f.git(f.consumer, 'rev-parse', 'HEAD^{tree}');
+  const commitTree = (tree, parent) => f.git(f.consumer, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit-tree', tree, '-p', parent, '-m', 'squash');
+  const merged = commitTree(tree, base);
+  const digest = value => createHash('sha256').update(value).digest('hex');
+  const report = operation => ({operation,outcome:'passed',revision:head,trustedRevision:f.revision,evidenceDigest:digest(operation),policyDigest:digest('policy'),qualityDigest:digest('quality'),contractDigest:digest('contract'),results:[{capability:operation,status:'passed',required:true}]});
+  const reports = Object.fromEntries(Object.entries({validation:'validate',policy:'policy',coverage:'coverage',security:'security',sast:'sast',human_review:'human-review'}).map(([name,operation])=>[name,report(operation)]));
+  reports.coverage.baseRevision=base;
+  Object.assign(reports.human_review,{baseRevision:base,repository,pullRequest:1,requiredApprovals:1,approvals:[{id:17,login:'aaron-howard',revision:head}],changesRequested:[]});
+  const evidence={version:'1.0',revision:head,reports};
+  const file=join(f.consumer,'tmp/evidence.json');mkdirSync(join(f.consumer,'tmp'),{recursive:true});
+  const save=()=>writeFileSync(file,JSON.stringify(evidence));save();
+  const checks=parse(readFileSync(join(f.factory,'policies/governance.yaml'),'utf8')).governance.repository_protection.required_checks;
+  const dependencyPolicy=parse(readFileSync(join(f.factory,'policies/dependencies.yaml'),'utf8')).dependencies;
+  const pr={number:1,state:'closed',merged:true,head:{sha:head,repo:{full_name:repository}},merge_commit_sha:merged,base:{ref:'main',sha:base,repo:{full_name:repository}},user:{login:'factory-bot'}};
+  const responses=new Map([
+    [`/repos/${repository}/pulls/1`,pr],
+    [`/repos/${repository}/commits/${head}/check-runs?filter=latest&per_page=100`,{check_runs:checks.map(check=>({id:1,name:'validation / '+check.context,app:{id:check.integration_id},head_sha:head,status:'completed',conclusion:'success'}))}],
+    [`/repos/${repository}/pulls/1/reviews?per_page=100`,[{id:17,state:'APPROVED',commit_id:head,submitted_at:'2026-10-04T12:00:00Z',user:{login:'aaron-howard',type:'User'}}]],
+    [`/repos/${repository}/issues?state=open&per_page=100`,[]],
+    [`/repos/${repository}/collaborators/aaron-howard/permission`,{permission:'write'}],
+  ]);
+  const options={...f.options,'--source-revision':head,'--repository':repository,'--pull-request':'1','--evidence':file,'--artifact-directory':join(f.consumer,'tmp')};
+  const dependencies={fetchImpl:async url=>({ok:responses.has(url.pathname+url.search),status:404,json:async()=>responses.get(url.pathname+url.search)}),collectGovernance:async()=>({outcome:'passed',enforcementEvidence:'live GitHub ruleset configuration; runtime authorization is not certified',policyDigest:digest('governance')}),releaseArtifact:async revision=>{assert.equal(revision,head);return {outcome:'passed',artifactDigest:digest('artifact'),sbomDigest:digest('sbom'),validationEvidenceDigest:digest(JSON.stringify(reports.validation)),dependencyCount:3,dependencySource:{ecosystem:'npm',registry:dependencyPolicy.artifact.dependency_registry,lockfile:'workload/package-lock.json',lockfileVersion:dependencyPolicy.artifact.lockfile_version,includesDevelopmentDependencies:dependencyPolicy.artifact.include_development_dependencies,packageCount:3}};}};
+  return {...f,head,base,merged,pr,responses,evidence,save,options,dependencies,commitTree};
+}
+
+test('consumer certification reuses PR checks and original package across an identical squash tree', async t => {
+  const token=process.env.FACTORY_GITHUB_TOKEN;process.env.FACTORY_GITHUB_TOKEN='test-token';
+  t.after(()=>{if(token===undefined)delete process.env.FACTORY_GITHUB_TOKEN;else process.env.FACTORY_GITHUB_TOKEN=token;});
+  const f=certificationFixture(t), result=await certifyRelease(f.options,f.dependencies);
+  assert.equal(result.outcome,'certified',JSON.stringify(result));
+  assert.equal(result.revision,f.head);assert.equal(result.mergedRevision,f.merged);assert.notEqual(f.head,f.merged);
+  assert.equal(result.hostedBaseRevision,f.base);
+});
+
+test('consumer certification refuses changed merge content, baseline, stale checks, fork and stale evidence', async t => {
+  const token=process.env.FACTORY_GITHUB_TOKEN;process.env.FACTORY_GITHUB_TOKEN='test-token';
+  t.after(()=>{if(token===undefined)delete process.env.FACTORY_GITHUB_TOKEN;else process.env.FACTORY_GITHUB_TOKEN=token;});
+  for (const mutate of [
+    f=>{f.pr.merge_commit_sha=f.commitTree(f.git(f.consumer,'rev-parse',`${f.base}^{tree}`),f.base);},
+    f=>{f.pr.merge_commit_sha=f.commitTree(f.git(f.consumer,'rev-parse',`${f.head}^{tree}`),f.head);},
+    f=>{f.responses.get(`/repos/owner/consumer/commits/${f.head}/check-runs?filter=latest&per_page=100`).check_runs[0].head_sha=f.base;},
+    f=>{f.pr.head.repo.full_name='fork/consumer';},
+    f=>{f.evidence.reports.security.revision=f.base;f.save();},
+    f=>{f.pr.merged=false;},
+  ]) {
+    const f=certificationFixture(t);mutate(f);
+    const result=await certifyRelease(f.options,f.dependencies);assert.equal(result.outcome,'blocked',JSON.stringify(result));
+  }
 });

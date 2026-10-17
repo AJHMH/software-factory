@@ -71,11 +71,14 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PRODUCER_RUN_ID: ${{ inputs.producer_run_id }}
           SOURCE_REVISION: ${{ inputs.source_revision }}
+          PULL_REQUEST: ${{ inputs.pull_request_number }}
           EVIDENCE_BUNDLE: ${{ inputs.evidence_bundle }}
         run: |
           [[ "$PRODUCER_RUN_ID" =~ ^[0-9]{1,20}$ ]]
           mkdir -p tmp
           gh api "repos/$REPOSITORY/actions/runs/$PRODUCER_RUN_ID" > tmp/producer.json
+          [[ "$PULL_REQUEST" =~ ^[1-9][0-9]*$ ]]
+          gh api -H 'X-GitHub-Api-Version: 2022-11-28' "repos/$REPOSITORY/pulls/$PULL_REQUEST" > tmp/producer-pull.json
           node scripts/consumer-producer.mjs
       - uses: actions/download-artifact@v4
         with:

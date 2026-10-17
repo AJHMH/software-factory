@@ -80,11 +80,11 @@ and read the consumer source history without borrowing Factory source commits.
 
 ## Certification and governance
 
-Certification is a separate consumer dispatch after a successful adoption **push
-to main**. Supply the producer run ID, exact source revision, merged PR number, and
+Certification is a separate consumer dispatch after a successful adoption **PR
+run** and merge. Supply the producer run ID, exact source revision, merged PR number, and
 a complete evidence bundle containing actual validation, policy, coverage, security,
 SAST, and human review reports. The producer must be the matching successful
-`factory-adoption.yml` push; downloads bind the source SHA and producer run ID.
+`factory-adoption.yml` PR run; downloads bind the source SHA and producer run ID.
 
 Every non-validation gate report must be produced with the pinned Factory policy
 revision. Human review applies to the PR's exact head and source base, uses that
