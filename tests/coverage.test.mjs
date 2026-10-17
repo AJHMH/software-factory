@@ -97,6 +97,11 @@ test('the Node adapter collects actual committed baseline/head coverage and sepa
   assert.equal(report.metrics.changed.lines.percentage, 100);
   assert.deepEqual(report.diagnostics.stages.map(s => s.phase), ['unit-tests', 'integration-tests', 'head-instrumentation', 'base-instrumentation']);
   assert.ok(report.diagnostics.stages.every(s => s.status === 'passed' && s.durationMs >= 0 && !('stdout' in s) && !('stderr' in s)));
+  for (const stage of report.diagnostics.stages) {
+    assert.equal(stage.resourceDiagnostics.schemaVersion, 1);
+    assert.equal(stage.resourceDiagnostics.platform, process.platform);
+    assert.ok(stage.resourceDiagnostics.samples.length >= 1 && stage.resourceDiagnostics.samples.length <= 128);
+  }
   assert.ok(report.results.some(gate => gate.capability === 'unit-tests' && gate.status === 'passed'));
   assert.ok(report.results.some(gate => gate.capability === 'integration-tests' && gate.status === 'passed'));
 });
@@ -312,5 +317,9 @@ test('measurement distinguishes a stage deadline from a nonzero test exit', t =>
   assert.equal(stage.timedOut, true);
   assert.equal(stage.exitCode, null);
   assert.equal(stage.signal, 'SIGKILL');
+  assert.equal(stage.resourceDiagnostics.schemaVersion, 1);
+  assert.equal(stage.resourceDiagnostics.platform, process.platform);
+  assert.ok(stage.resourceDiagnostics.samples.length >= 1 && stage.resourceDiagnostics.samples.length <= 128);
+  assert.ok(stage.resourceDiagnostics.samples.at(-1).elapsedMs >= 1000);
   assert.ok(stage.durationMs >= 1000);
 });
