@@ -69,6 +69,7 @@ export async function collectCoverage(options) {
     stages.push({ phase, status: result.status, startedAt: result.startedAt, finishedAt: result.finishedAt,
       durationMs: Date.parse(result.finishedAt) - Date.parse(result.startedAt), exitCode: result.exitCode,
       signal: result.signal, timedOut: result.timedOut, terminationFailed: result.terminationFailed,
+      resourceDiagnostics: result.resourceDiagnostics,
       truncated: result.truncated, ...(result.status === 'passed' ? {} : { stdout: redact(result.stdout), stderr: redact(result.stderr) }) });
     return result;
   }
