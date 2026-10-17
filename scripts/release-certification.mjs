@@ -76,8 +76,10 @@ export async function certifyRelease(options, dependencies = {}) {
     if (!/^[a-f0-9]{40}$/.test(coverageBase ?? '') || git(sourceRepo, ['cat-file', '-t', coverageBase]) !== 'commit' || git(sourceRepo, ['merge-base', '--is-ancestor', coverageBase, revision]) !== '') throw new Error('Coverage baseline is missing, invalid, or outside the certified source history.');
     const apiPrefix = `repos/${repository}`;
     const pr = await github(`${apiPrefix}/pulls/${prNumber}`, fetchImpl);
-    if (pr.merged !== true || pr.state !== 'closed' || !/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '') || pr.merge_commit_sha !== revision || pr.base?.ref !== 'main') throw new Error('The pull request must be merged into main, and the certificate revision must be its exact squash/merge commit.');
-    const mergedBase = git(sourceRepo, ['rev-parse', `${revision}^1`]);
+    if (pr.merged !== true || pr.state !== 'closed' || !/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '') || (!distribution && pr.merge_commit_sha !== revision || distribution && pr.head.sha !== revision) || !/^[a-f0-9]{40}$/.test(pr.merge_commit_sha ?? '') || pr.base?.ref !== 'main') throw new Error('The pull request must be merged into main, and the certificate source must match its exact reviewed head (consumer) or merge commit (Factory).');
+    const mergedRevision = pr.merge_commit_sha;
+    const mergedBase = git(sourceRepo, ['rev-parse', `${mergedRevision}^1`]);
+    if (distribution && (pr.head.repo?.full_name !== repository || pr.base.repo?.full_name !== repository || git(sourceRepo, ['rev-parse', `${mergedRevision}^{tree}`]) !== git(sourceRepo, ['rev-parse', `${revision}^{tree}`]))) throw new Error('Merged consumer content differs from the validated PR head; fresh validation is required.');
     if (coverageBase !== mergedBase) throw new Error('Coverage evidence baseline does not match the pull request base revision.');
     requireReport(evidence.reports.human_review, 'human-review', pr.head.sha, distribution ? trusted : mergedBase, distribution ? mergedBase : undefined);
     const [checkData, reviews, issueData] = await Promise.all([
@@ -147,7 +149,7 @@ export async function certifyRelease(options, dependencies = {}) {
     const reportDigests = Object.fromEntries(Object.entries(evidence.reports).map(([key, report]) => [key, report.evidenceDigest ?? report.contractDigest]));
     const certifiedAt = new Date().toISOString();
     const certificate = {
-      schemaVersion: 1, operation: 'certify', outcome: 'certified', repository, pullRequest: prNumber, revision, baseRevision: coverageBase, hostedBaseRevision: mergedBase, reviewedPullRequestHead: pr.head.sha,
+      schemaVersion: 1, operation: 'certify', outcome: 'certified', repository, pullRequest: prNumber, revision, mergedRevision, baseRevision: coverageBase, hostedBaseRevision: mergedBase, reviewedPullRequestHead: pr.head.sha,
       trustedRevision: trusted, certifiedAt, approvers: approvals.map(review => ({ login: review.user.login, reviewId: review.id, revision: review.commit_id })),
       policyDigests: { governance: governance.policyDigest, execution: evidence.reports.policy.policyDigest, quality: evidence.reports.coverage.qualityDigest, security: evidence.reports.security.policyDigest, sast: evidence.reports.sast.policyDigest, contract: evidence.reports.validation.contractDigest },
       releasePolicy: { defectZeroSeverity: quality.zero_open_defects_severity, maximumMediumDefects: limits.medium, maximumLowDefects: limits.low, dependencySource: dependencyPolicy.artifact, dependencyAssurance: assurance },

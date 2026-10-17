@@ -55,14 +55,15 @@ inspection. Do not give bootstrap authority to any hosted workflow.
 
 Obtain a current owner GitHub approval for the exact proposal head. Refresh its
 read-only review jobs after approval if needed. Every required check must pass
-before a conditional merge. A passing main adoption push must produce the package;
-feature runs, dispatches, failed runs and earlier commits cannot replace it.
+before a conditional merge. The successful exact-head PR adoption run produces
+both the package and gate evidence. No adoption push to main is required.
 
-The producer resolves exactly one merged PR whose merge commit is its source
-revision. Coverage uses the source merge's first parent. Human review is collected
-at the original reviewed head, explicitly bound by `--merged-revision` to that
-merged source and original base; live review changes still invalidate it. No
-approval is manufactured for the squash commit.
+Certification independently verifies the merged PR, the successful producer run's
+repository/workflow/PR/head/base identities, and equality of the merged Git tree
+with the validated head. Coverage must use the merge's first parent. A changed
+base, changed merge content, stale head or failed run requires fresh PR validation.
+Human approval and required checks remain bound to the original PR head and are
+rechecked live; artifact bytes and report revisions are never relabeled.
 
 Download artifacts from that one producer run. Keep their manifest/run IDs. Copy
 `validation-evidence.json` from the package into a private reports directory as
@@ -71,13 +72,16 @@ Download artifacts from that one producer run. Keep their manifest/run IDs. Copy
 Do not edit outcomes, revisions, digests or review identities.
 
 ```powershell
-node factory/scripts/factory-validation.mjs consumer-evidence --reports-directory <reports-dir> --source-revision <merge-SHA> --trusted-revision <Factory-SHA> --base-revision <merge-first-parent> --review-head <approved-PR-head> --output <new-bundle.json>
+node factory/scripts/factory-validation.mjs consumer-evidence --reports-directory <reports-dir> --source-revision <approved-PR-head> --trusted-revision <Factory-SHA> --base-revision <merge-first-parent> --review-head <approved-PR-head> --output <new-bundle.json>
 ```
 
 Assembly validates six passing reports, digests and independent identities. It
 reports `certification: not-run`; supplied files never establish hosted approval.
 Dispatch consumer `factory-adoption.yml` on main with `source_revision`,
 `producer_run_id`, `pull_request_number`, and the assembled JSON `evidence_bundle`.
+Set `source_revision` to the approved PR head and `producer_run_id` to its passing
+PR run. The certificate records that tested `revision` and a separate
+`mergedRevision` linking identical source content to main.
 The pinned certification entry point retrieves the original immutable package and
 verifies bytes, SBOM, dependency sources, exact reports, current GitHub approval,
 required checks, protections and defect limits without rebuilding or executing
@@ -95,7 +99,7 @@ Missing, malformed, failed, stale or mismatched evidence blocks assembly or
 certification. A revoked/self/agent approval, wrong producer, missing protection,
 unsupported workload or unsuccessful required check blocks delivery. Repeat the
 actual gate at the same revision where possible; otherwise prepare a new reviewed
-source revision and main producer. Do not relabel an old artifact as certified.
+source revision and PR producer. Do not relabel an old artifact as certified.
 
 If an adoption upgrade fails, restore the prior lock/calls in a reviewed PR and
 restore its independently approved pin. Preserve failed evidence for diagnosis.
