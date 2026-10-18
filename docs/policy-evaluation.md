@@ -25,7 +25,8 @@ from that commit, ignoring corresponding files in the proposed working tree.
 Their schemas, the contract schema, and exception schema are validated before
 evaluation. Unknown fields and unsupported versions/profiles are rejected.
 The effective timeout is the minimum of the factory baseline and selected profile
-limit. The committed sample uses 300 and 120 seconds respectively. A scoped,
+limit. The committed pack uses a 300-second baseline, with profile limits of 120
+seconds for `node-24` and 240 seconds for `node-24-typescript-cli`. A scoped,
 approved exception then replaces that limit, within the schema's absolute 600
 second bound. Multiple exceptions to the same rule are rejected, even if identical.
 
