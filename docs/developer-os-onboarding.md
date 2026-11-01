@@ -125,3 +125,9 @@ reruns those same checks and consumes their original producer output.
 This removes two repeated collections on PRs and one on main pushes; it does not
 remove the first collection's cost or diagnose the intermittent failure itself.
 Use failed-stage diagnostics to identify that cause before changing scheduling.
+
+The coverage job's 30-minute limit covers its bounded stages: for
+`node-24-typescript-cli`, two 120-second installs, two 120-second builds and four
+test or instrumentation runs at the 240-second profile limit (24 minutes), plus
+checkout and setup. Each stage still stops at its own deadline. An approved
+exception above the profile limit can exceed this job limit.

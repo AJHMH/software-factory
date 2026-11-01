@@ -327,6 +327,9 @@ test('consumer reusable gates retain all baseline checks and isolate certificati
 test('consumer approval gates reuse only the immutable same-run reviewed-head coverage artifact', () => {
  const workflow = parse(readFileSync(join(root, '.github/workflows/factory-consumer-validation.yml'), 'utf8'));
  const coverage = workflow.jobs.coverage;
+ const profileLimit = Math.max(...parse(readFileSync(join(root, 'profiles/workloads.yaml'), 'utf8')).profiles.map(p => p.maximum_command_timeout_seconds));
+ assert.equal(coverage['timeout-minutes'], 30);
+ assert.ok(coverage['timeout-minutes'] * 60 >= 4 * 120 + 4 * profileLimit, 'coverage job must outlast its bounded install, build, test and instrumentation stages');
  assert.equal(coverage.outputs.evidence_artifact, '${{ steps.evidence.outputs.artifact-id }}');
  assert.equal(coverage.steps.find(s => s.id === 'evidence').uses, 'actions/upload-artifact@v4');
  assert.ok(coverage.steps.find(s => s.id === 'evidence').with.name.endsWith('-${{ github.run_attempt }}'));
